@@ -1,3 +1,13 @@
+# Rmarkdown 
+/**/*_files
+/**/*_cache
+
+# Intermediary, legacy and doubtful files
+_stray
+
+# Data files
+/**/*.rds
+
 # History files
 .Rhistory
 .Rapp.history
