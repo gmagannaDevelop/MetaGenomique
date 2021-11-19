@@ -5,8 +5,11 @@ BiocManager::install("qvalue")
 
 # Install pacakges
 list.of.packages <-
-  c('devtools', 'RJSONIO','ecodist','gplots', 'scatterplot3d','usethis', 'httr',
-                  'rcmdcheck', 'roxygen2', 'rversions')
+  c('devtools', 'RJSONIO','ecodist','gplots', 
+    'scatterplot3d','usethis', 'httr',
+    'rcmdcheck', 'roxygen2', 'rversions', # original packages (professor's)
+    'foreach', 'doFuture', 'tidyverse' # mine
+    )
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 

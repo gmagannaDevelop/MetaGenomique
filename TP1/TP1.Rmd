@@ -13,24 +13,42 @@ knitr::opts_chunk$set(echo = F, warning = F, message = F)
 library(matR)
 library(tidyverse)
 library(reshape2)
+library(parallel)
+library(foreach)
+library(doParallel)
+library(stringr)
+library(doRNG)
 ```
 
 ```{r data.import}
-metadata.df <- read.table("MetadataCheese.csv", header = T)
-metadata.tb <- tibble(metadata.df)
+# Read raw data, the initial dot implies these objects are not 
+# supposed to be used directly
+# The identifier should be read as a string 
+.metadata.df <- within(read.table("MetadataCheese.csv", header = T), {
+  ID <- as.character(ID)
+})
+.metadata.tb <- tibble(.metadata.df)
 
-#List des accessions associées à l'étude mgp3362 
-# (2 échantillons absents des métadonnées)
-list_mgp3362<-metadata("mgp3362")$mgp3362
-list_mgp3362<-list_mgp3362[c(-11,-22)]
-#Récupération des données taxonomiques (request='organism') depuis les hits
-#de la base de données RDP (source='RDP') au niveau de l'ordre (group_level='order')
-#avec une evalue de 1e-15 (evalue=15)
-biom_phylum<-biomRequest(list_mgp3362,request="organism",source="RDP",
-group_level="order",evalue=15,wait=TRUE)
+.backup.file <- "biom_phylum.rds"
+if (!file.exists(.backup.file)){
+  #List des accessions associées à l'étude mgp3362 
+  # (2 échantillons absents des métadonnées)
+  list_mgp3362 <- metadata("mgp3362")$mgp3362
+  list_mgp3362 <- list_mgp3362[c(-11,-22)]
+  #Récupération des données taxonomiques (request='organism') depuis les hits
+  #de la base de données RDP (source='RDP') au niveau de l'ordre (group_level='order')
+  #avec une evalue de 1e-15 (evalue=15)
+  biom_phylum <- biomRequest(
+    list_mgp3362, request="organism", source="RDP",
+    group_level="order", evalue=15, wait=TRUE
+  )
+  saveRDS(biom_phylum, .backup.file)
+} else {
+  biom_phylum <- readRDS(.backup.file)
+}
 
 #Transformation en matrice
-phylum.matrix <- as.matrix(biom_phylum)
+.phylum.matrix <- as.matrix(biom_phylum)
 clean_data_frame <- function(my.matrix){
   #' Convert a matrix to a dataframe, 
   #' eliminating null columns
@@ -38,38 +56,83 @@ clean_data_frame <- function(my.matrix){
   .null.col.sums <- colSums(.df) == 0
   .to.drop <- .null.col.sums[.null.col.sums]
   .cols.to.drop <- names(.to.drop)
-  return(.df[, !colnames(.df) %in% .cols.to.drop])
+  .clean.df <- .df[, !colnames(.df) %in% .cols.to.drop]
+  .retval <- list(
+    clean.df=.clean.df,
+    null.cols=.cols.to.drop
+  )
+  return(.retval)
 }
 
-phylum.df <- clean_data_frame(phylum.matrix)
+.clean <- clean_data_frame(.phylum.matrix)
+phylum.df <- .clean$clean.df
+phylum.matrix <- as.matrix(phylum.df)
 phylum.tb <- phylum.df %>% rownames_to_column("Strain") %>% as_tibble()
+
+
+.null.cols.chr <- .clean$null.cols %>% 
+  # this regex matches numbers with at least one decimal, 
+  # preceded by three letters (as our IDs are conigured)
+  # letters are not captured
+  str_match("(?<=[:alpha:]{3})[:digit:]+\\.[:digit:]+") %>% 
+  as.character()
+
+metadata.tb <- .metadata.tb %>% filter(!ID %in% .null.cols.chr)
+metadata.df <- metadata.tb %>% column_to_rownames("ID")
+
+#str_match(.clean$null.cols, "(?<=[:alpha:]{3})[:digit:]+") %>% as.character() %>% as.numeric()
+#.clean$null.cols %>% purrr::map(~ stringr::str_match(.x, "(?<=[:alpha:]{3})[:digit:]+") %>% as.numeric)
 ```
 
 
 Les courbes de raréfaction doivent être par échantillon.
 
-```{r rarefaction.curve}
-otus <- phylum.tb %>% select(Strain) %>% unlist
-names(otus) <- NULL
+```{r rarefaction.curve, cache=T}
+otus <- phylum.df %>% rownames
+samples <- phylum.df %>% colnames
 phylum.prob.df <- apply(phylum.df, 2, function(x){ x / sum(x)})
 
 
-rarefactions.ls <- list()
-for (i in 1:ncol(phylum.df)){
-  .n.taxa <- c()
-  .n.seq <- c()
-  for (j in seq(1, 10000, 50)){
-    .tax <- sample(
-      otus, j, prob = phylum.prob.df[,i], replace = T
-    ) %>% unique() %>% length()
-    .n.taxa <- c(.n.taxa, .tax)
-    .n.seq <- c(.n.seq, j)
-  }
-  rarefactions.ls[[i]] <- tibble(nSeq=.n.seq, nOTU=.n.taxa)
-}
+library(doParallel)
+cl <- makeCluster(parallel::detectCores())
+registerDoParallel(cl)
+set.seed(1234)
 
-rarefactions.ls[[2]] %>% 
-  ggplot(aes(x=nSeq, y=nOTU)) + geom_line() + geom_smooth()
+.n.replicas <- 500
+tryCatch(
+  rarefactions.tb <- foreach(
+    i=samples, .inorder = F, .combine = rbind, 
+    .packages = c("magrittr", "tibble", "stringr")
+  ) %dorng% {
+    .nb.seq <- seq(1, sum(phylum.df[,i]), 20)
+    .n.taxa <- vector("numeric", length = length(.nb.seq))
+    for (j in seq_along(.nb.seq)){
+     .n.taxa[j] <- replicate(.n.replicas, 
+       sample(otus, .nb.seq[j], prob = phylum.prob.df[,i], replace = T) %>% 
+         unique %>% length
+      ) %>% mean
+     #.n.taxa <- c(.n.taxa, .tax)
+    }
+    tibble(
+      `Nombre de Séquences`=.nb.seq, 
+      `Nombre d'OTU`=.n.taxa,
+      `Échantillon`=i %>% 
+        str_match("(?<=[:alpha:]{3})[:digit:]+") %>% 
+        as.character()
+    )
+  }, 
+  finally = stopCluster(cl)
+)
+
+
+
+rarefactions.tb %>% 
+  ggplot(aes(x=`Nombre de Séquences`, y=`Nombre d'OTU`)) +
+    geom_line(aes(colour=`Échantillon`)) + 
+      labs(title = glue::glue("Diversité alpha, moyenne sur {.n.replicas} répliques"))
+
+#rarefactions.ls[[1]] %>% 
+#  ggplot(aes(x=nSeq, y=nOTU)) + geom_line() + geom_smooth()
 ```
 
 ```{r shannon}
@@ -79,7 +142,7 @@ H <- function(x){
   - sum(p * log(p)) 
 }
 
-apply(phylum.prob.df, 2, H)
+shannon <- apply(phylum.prob.df, 2, H)
 ```
 
 
