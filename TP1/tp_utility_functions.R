@@ -1,9 +1,13 @@
 
-library(docstring)
+require(docstring)
 
 clean_data_frame <- function(my.matrix){
-  #' Convert a matrix to a dataframe, 
-  #' eliminating null columns
+  #' Clean data.frames 
+  #' Cast a matrix into a data.frame, eliminating
+  #' all columns having a sum equal to zero.
+  #' @param my.matrix A matrix to be pruned and converted to data.frame
+  #' @return A list with two attributes, clean.df (the pruned data.frame)
+  #'         and null.cols (the colnames whose sum was equal to zero)
   .df <- as.data.frame(my.matrix)
   .null.col.sums <- colSums(.df) == 0
   .to.drop <- .null.col.sums[.null.col.sums]
@@ -17,8 +21,8 @@ clean_data_frame <- function(my.matrix){
 }
 
 H <- function(x){ 
-  #' Shannon's entropy of an entry vector
-  #' @param x, the vector whose entropy is to be calculated
+  #' Shannon's entropy
+  #' @param x the vector whose entropy is to be calculated
   p <- x[x > 0] 
   - sum(p * log(p)) 
 }

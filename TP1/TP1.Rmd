@@ -12,16 +12,18 @@ set.seed(1234)
 
 ```{r lib.import}
 # CRAN
-library(tidyverse)
-library(reshape2)
-library(parallel)
-library(foreach)
-library(doParallel)
-library(stringr)
-library(doRNG)
-library(here)
-# GITHUB
-library(matR)
+.required.packages <- 
+  c("tidyverse", "reshape2", "parallel", "foreach", "doParallel",
+  "stringr", "doRNG", "here", "devtools", "docstring")
+new.packages <- 
+  .required.packages[!(.required.packages %in% installed.packages()[,"Package"])]
+
+if(length(new.packages)) { install.packages(new.packages) } 
+
+.loaded <- lapply(.required.packages, require, character.only = T)
+
+if (!require("matR")){ install_github(repo='MG-RAST/matR',quiet=T) }
+
 source(here("TP1/tp_utility_functions.R"))
 ```
 

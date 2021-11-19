@@ -1,3 +1,6 @@
+# Ignore pdfs by default (to avoid commiting Rmakrdown intermediate builds)
+/**/*.pdf
+
 # Rmarkdown 
 /**/*_files
 /**/*_cache
@@ -7,6 +10,7 @@ _stray
 
 # Data files
 /**/*.rds
+/**/*.csv
 
 # History files
 .Rhistory
