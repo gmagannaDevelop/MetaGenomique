@@ -5,6 +5,18 @@ library(rlang)
 library(MASS)
 
 tidy_lda <- function(phylum.matrix, metadata.tb, grouping.var){
+  #' Tidy LDA
+  #'
+  #' Perform MASS::lda on a dataset, specifying the grouping
+  #' as a column of your metadata.tb
+  #'
+  #' @param phylum.matrix A matrix with taxa as rows and samples as columns
+  #' @param metadata.tb A tibble with samples as rows and metadata as columns
+  #' @param grouping.var The categorical variable used to distinguish the groups
+  #'
+  #' @note `grouping.var` is a symbol, not a string, because this function uses
+  #' tidy evaluation.
+
   # Defuse grouping var
   grouping.var <- rlang::enquo(grouping.var)
   
@@ -14,7 +26,7 @@ tidy_lda <- function(phylum.matrix, metadata.tb, grouping.var){
     unlist %>% 
     as.character()
   
-  # Find the set of unique labels of grouper
+  # Find the set of unique labels for the grouper
   .levels <- unique(.grouper)
   
   # Perform lda
@@ -23,6 +35,7 @@ tidy_lda <- function(phylum.matrix, metadata.tb, grouping.var){
   
   .scale.lda <- function(x){ LDA$scaling * x }
   # Create the list of LDA components
+  # One for each level in .levels
   lda.ls <- sapply(
     .levels,
     function(x){
@@ -34,6 +47,9 @@ tidy_lda <- function(phylum.matrix, metadata.tb, grouping.var){
     simplify = T
   )
   
+  # Combine the list into a tibble (tidyverse's data.frames)
+  # Having one column for the values and another for the
+  # group name
   lda.tb <- lda.ls %>% 
     purrr::map2(names(lda.ls), ~ tibble(LDA_means=.x, Group=.y)) %>% 
     purrr::reduce(~ rbind(.x, .y))
