@@ -13,8 +13,10 @@ set.seed(1234)
 ```{r lib.import}
 # CRAN
 .required.packages <- 
-  c("tidyverse", "reshape2", "parallel", "foreach", "doParallel",
-  "stringr", "doRNG", "here", "devtools", "docstring")
+  c("rlang", "tidyverse", "reshape2", "parallel", "foreach", 
+    "doParallel", "stringr", "doRNG", "here", "devtools", 
+    "docstring")
+
 new.packages <- 
   .required.packages[!(.required.packages %in% installed.packages()[,"Package"])]
 
@@ -130,8 +132,38 @@ rarefactions.tb %>%
 ```
 
 ```{r shannon}
-
 shannon <- apply(phylum.prob.df, 2, H)
+
+.are.aligned <- metadata.tb %>% 
+  mutate(
+    `Shannon Entropy` = shannon, 
+    `Shannon ID` = str_replace(names(shannon), "mgm", "")
+  ) %>% 
+  filter(ID == `Shannon ID`) %>% 
+  nrow == nrow(metadata.tb)
+
+stopifnot(.are.aligned)
+
+# .r suffix indicates it will be used for regression
+metadata.tb.r <- metadata.tb %>% 
+  mutate(
+    `Shannon Entropy` = shannon, 
+    RindType = factor(RindType),
+    Pasteurized = factor(Pasteurized),
+    Country = factor(Country),
+    Region = factor(Region),
+    Milk = factor(Milk)
+  )
+
+metadata.tb.r %>% 
+  ggplot(aes(x=pH, y=`Shannon Entropy`)) + 
+  geom_point(aes(colour=RindType, shape = Milk, size=NaCl))
+
+# I did this regression because if we try with all variables, the problem
+# is undetermined
+reg1 <- lm(`Shannon Entropy` ~ RindType + pH + NaCl + Pasteurized + Milk, 
+   data = metadata.tb.r)
+summary(reg1)
 ```
 
 
@@ -159,6 +191,36 @@ legend('topleft',pch=19,col=c('red','green'),legend = c('Raw','Pasteurized'))
 
 ```
 
+Faites maintenant la même analyse discriminante sur les variables 
+catégorielles du type de croûte et de lait.
+
+```{r tidy.ldas}
+lda_pasteurized <- 
+  tidy_lda(phylum.matrix, metadata.tb, Pasteurized)
+lda_rindtype <- 
+  tidy_lda(phylum.matrix, metadata.tb, RindType)
+lda_milk <- 
+  tidy_lda(phylum.matrix, metadata.tb, Milk)
+
+lda_pasteurized %>% 
+  ggplot(aes(x=LDA_means, fill=Group)) + 
+  geom_histogram(alpha=0.5, position="identity")
+
+lda_rindtype %>% 
+  ggplot(aes(x=LDA_means, fill=Group)) + 
+  geom_freqpoly(aes(colour=Group), 
+                position="identity", binwidth = 2)
+  
+lda_rindtype %>% 
+  ggplot(aes(x=LDA_means, fill=Group)) + 
+  geom_histogram(alpha=0.3, position="identity", 
+                 colour="black", bins = 15)
+  
+  
+lda_milk %>% 
+  ggplot(aes(x=LDA_means, fill=Group)) + 
+  geom_histogram(alpha=0.5, position="identity", colour="black")
+```
 
 ```{r other.plot}
 par(mar=c(15,5,5,5))

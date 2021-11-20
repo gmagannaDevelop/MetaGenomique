@@ -1,5 +1,47 @@
 
 require(docstring)
+library(magrittr)
+library(rlang)
+library(MASS)
+
+tidy_lda <- function(phylum.matrix, metadata.tb, grouping.var){
+  # Defuse grouping var
+  grouping.var <- rlang::enquo(grouping.var)
+  
+  # Select the categorical variable to perform LDA
+  .grouper <- metadata.tb %>% 
+    dplyr::select(!!grouping.var) %>%
+    unlist %>% 
+    as.character()
+  
+  # Find the set of unique labels of grouper
+  .levels <- unique(.grouper)
+  
+  # Perform lda
+  LDA <- 
+    suppressWarnings(MASS::lda(t(phylum.matrix), grouping=.grouper))
+  
+  .scale.lda <- function(x){ LDA$scaling * x }
+  # Create the list of LDA components
+  lda.ls <- sapply(
+    .levels,
+    function(x){
+      phylum.matrix[, .grouper == x] %>% 
+        as.matrix %>% 
+        apply(2, .scale.lda) %>% 
+        colSums
+    },
+    simplify = T
+  )
+  
+  lda.tb <- lda.ls %>% 
+    purrr::map2(names(lda.ls), ~ tibble(LDA_means=.x, Group=.y)) %>% 
+    purrr::reduce(~ rbind(.x, .y))
+  
+  lda.tb
+}
+
+
 
 clean_data_frame <- function(my.matrix){
   #' Clean data.frames 
@@ -26,4 +68,6 @@ H <- function(x){
   p <- x[x > 0] 
   - sum(p * log(p)) 
 }
+
+
 
