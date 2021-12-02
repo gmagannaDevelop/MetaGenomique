@@ -38,8 +38,9 @@ if(length(new.packages)){
 #install.packages('coala_0.6.0.tar.gz',repos=NULL,type='source')
 library(coala) #for coalescent models
 library(ape) # for coalescent tree reconstruction
+library(here)
 
-activate_msms("msms3.2rc-b163.jar",priority = 1000)
+activate_msms(here("Coalescence/msms3.2rc-b163.jar"), priority = 1000)
 
 #neutral model
 Nlines=10 #Number of lineages ie haplotypes
