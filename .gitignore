@@ -1,3 +1,7 @@
+
+# Heavy data files, we'll include the compressed version
+/**/*txt.haps
+
 # Ignore pdfs by default (to avoid commiting Rmakrdown intermediate builds)
 /**/*.pdf
 
