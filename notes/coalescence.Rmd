@@ -1,0 +1,68 @@
+---
+title: "Méthodes de Coalescence"
+author: "Gustavo Magaña López"
+date: "25/11/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# La diversité génétique
+
+Flux génétique entre populations hiumaines.
+
+Population ancestrale: Perte de diversité à cause des migrations. Il n'y a 
+eu qu'un petit sous-ensemble de personnes qui sont sorties d'Afrique ce qui veut
+dire qu'il y a eu beaucoup d'allèles qui sont "restés" en Afrique.
+
+Cete perte de diversité est indépendante de
+
+# Modélisation 
+
+## Modèle de Wright-Fisher
+
+Le modèle classique de la génétique des populations. Description mathématique
+des variations des fréquences alléliques dans une population au cours du temps 
+dû uniquement à la dérive génétique.
+
+Hypothèses:
+
+* Générations non-chevauchantes
+* Panmixie : pas de 
+(y en avait 5)
+
+Dans le cas haploïde, la probabilité qu'un allèle présent dans $i$ individus
+sera présent dans $j$ individus à la génération suivante vaut:
+
+$$
+P_{i, j} = \left( \frac{N_{e}}{j}\right) 
+\frac{i}{N_{e}} ^{j} \left( 1 - \frac{i}{N_{e}} \right) ^\left(N_{e}- j\right)
+$$
+
+Qui est la loi binomiale.
+
+Quelle est la probabilité à la génération suivante que j'aie $j$ individus
+avec l'allèle qui était présent dans $i$ individus à la génération précédente.
+
+## Coalescence
+
+Comme spéciation en génomique comparée. Avoir un ancêtre commun.
+
+Avantages :
+  On ne simule que les individus qui ont laissé une descendance.
+  Depuis 3/4 années, la méthode "forward in time" commence à partir ? 
+  
+  Coalescence est super rapide, mais nécessite les hypothèses.
+  "Forward-in-time" est plus fexible mais si on relache trop 
+  d'hypothèses les resultats deviennent de moins en moins interprétables.
+
+
+### Simmulation de généalogies
+
+
+
+
+
+
