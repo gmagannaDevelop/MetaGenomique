@@ -128,11 +128,17 @@ if (!file.exists(here("TP1/rarefactions.csv"))){
 rarefactions.tb %>% 
   ggplot(aes(x=`Nombre de Séquences`, y=`Nombre d'OTU`)) +
     geom_line(aes(colour=`Échantillon`)) + 
-      labs(title = glue::glue("Diversité alpha, moyenne sur {.n.replicas} répliques"))
+      labs(title = glue::glue("Diversité alpha, moyenne sur {.n.replicas} répliques")) +
+        theme_classic()
 ```
 
 ```{r shannon}
 shannon <- apply(phylum.prob.df, 2, H)
+
+shannon.df <- shannon %>% as.data.frame()
+colnames(shannon.df) <- c("H")
+
+write.csv(shannon.df, file = here("H.csv"))
 
 .are.aligned <- metadata.tb %>% 
   mutate(
@@ -161,9 +167,20 @@ metadata.tb.r %>%
 
 # I did this regression because if we try with all variables, the problem
 # is undetermined
-reg1 <- lm(`Shannon Entropy` ~ RindType + pH + NaCl + Pasteurized + Milk, 
+reg1 <- lm(`Shannon Entropy` ~ RindType + pH + NaCl + Pasteurized + Milk + Moisture, 
    data = metadata.tb.r)
-summary(reg1)
+s.reg1 <- summary(reg1)
+
+shannonreg <- s.reg1$coefficients %>% 
+  as.data.frame %>% rownames_to_column() %>% 
+  as_tibble() %>% 
+  mutate( `Significatif` = if_else(`Pr(>|t|)` < 0.05, "Oui", "Non")) %>%
+  rename(`p-value` = `Pr(>|t|)`)
+  rename(Variable = rowname)
+
+
+write.csv(shannonreg, file = here("shannonreg.csv"))
+write.cs
 ```
 
 
@@ -186,6 +203,7 @@ hist(LDA1_Pasteurized, xlim=c(min(LDA1_RawMilk)-4, max(LDA1_Pasteurized)+1),
      col='green', xlab='LD1 means', ylab='Frequency', main='Predicted Values'
 )
 
+plot.new()
 hist(LDA1_RawMilk,col='red',add=T)
 legend('topleft',pch=19,col=c('red','green'),legend = c('Raw','Pasteurized'))
 
@@ -197,30 +215,54 @@ catégorielles du type de croûte et de lait.
 ```{r tidy.ldas}
 lda_pasteurized <- 
   tidy_lda(phylum.matrix, metadata.tb, Pasteurized)
+
+rind.meta <- metadata.tb %>% 
+  mutate(RindMod = if_else(RindType == "washed", RindType, "unwashed"))
 lda_rindtype <- 
-  tidy_lda(phylum.matrix, metadata.tb, RindType)
+  tidy_lda(phylum.matrix, rind.meta, RindMod)
+
 lda_milk <- 
   tidy_lda(phylum.matrix, metadata.tb, Milk)
 
-lda_pasteurized %>% 
-  ggplot(aes(x=LDA_means, fill=Group)) + 
-  geom_histogram(alpha=0.5, position="identity")
+ldas <- list()
 
-lda_rindtype %>% 
+ldas[[1]] <- lda_pasteurized$visual %>% 
   ggplot(aes(x=LDA_means, fill=Group)) + 
-  geom_freqpoly(aes(colour=Group), 
-                position="identity", binwidth = 2)
+  geom_histogram(aes(y=..density..), alpha=0.5, 
+                 position="identity", colour="black", bins = 24) +
+  #geom_histogram(alpha=0.5, position="identity", bins = 24) +
+  labs(title = "Pasteurized")
   
-lda_rindtype %>% 
+ldas[[2]] <- lda_rindtype$visual %>% 
   ggplot(aes(x=LDA_means, fill=Group)) + 
-  geom_histogram(alpha=0.3, position="identity", 
-                 colour="black", bins = 15)
+  geom_histogram(aes(y=..density..), alpha=0.3, position="identity", 
+                 colour="black", bins = 24) +
+  labs(title = "Rind Type")
   
   
-lda_milk %>% 
+ldas[[3]] <- lda_milk$visual %>% 
   ggplot(aes(x=LDA_means, fill=Group)) + 
-  geom_histogram(alpha=0.5, position="identity", colour="black")
+  geom_histogram(aes(y=..density..), alpha=0.5, position="identity", colour="black", bins = 24) +
+  labs(title = "Milk Type")
+
+gridExtra::grid.arrange(ldas[[1]], ldas[[2]], ldas[[3]], nrow=1)
+#do.call(gridExtra::grid.arrange, ldas)
 ```
+
+```{r tablo}
+milk.lda.scaling <-
+  lda_milk$model$scaling[,1] %>% sort(decreasing = T) %>% as.data.frame() 
+rind.lda.scaling <- 
+  lda_rindtype$model$scaling[,1] %>% sort(decreasing = T) %>% as.data.frame()
+past.lda.scaling <-
+  lda_pasteurized$model$scaling[,1] %>% sort(decreasing = T) %>% as.data.frame()
+
+scalings <- cbind(past.lda.scaling, milk.lda.scaling, rind.lda.scaling)
+colnames(scalings) <- c("Milk ~", "Rind ~", "Pasteurized ~")
+scalings %>% knitr::kable(digits = 4)
+write.csv(scalings, file = here("lda_scalings_from_taxa2.csv"))
+```
+
 
 ```{r other.plot}
 par(mar=c(15,5,5,5))
@@ -244,3 +286,66 @@ pca_res$x %>%
        y=paste0("PC2: ",round(var_explained[2]*100,1),"%")) +
   theme(legend.position="top")
 ```
+
+
+```{r diversite.lm.taxa}
+phylum.matrix.t <- t(phylum.matrix)
+
+coherent.lm <- function(Y, X){
+  
+  skip.first <- function(x){ x[2:length(x)] }
+  
+  .first.lm <- lm(Y ~ X)
+  .to.keep <- skip.first(!is.na(.first.lm$coefficients))
+  .. <- X[, .to.keep]
+  
+  .model <- lm(Y ~ ..)
+  names(.model$coefficients) <-
+    .model$coefficients %>% 
+    names %>% 
+    stringr::str_replace("\\.\\.", "")
+  .model
+}
+
+toppres <- rowSums(phylum.df) %>% 
+  sort(decreasing = T) %>% 
+  as.data.frame() %>% 
+  head(10)
+
+our.taxa <- Filter(function(x){ !str_detect(x, "unclassified")}, row.names(toppres))
+
+nacl <- coherent.lm(Y = metadata.df$NaCl, phylum.matrix.t[, our.taxa])
+moist <- coherent.lm(Y = metadata.df$Moisture, phylum.matrix.t[, our.taxa])
+ph <- coherent.lm(Y = metadata.df$pH, phylum.matrix.t[, our.taxa])
+
+
+nacl.coefs <- summary(nacl)$coefficients %>%   # %>% sort(decreasing = T) %>% as.data.frame()
+  as.data.frame %>% rownames_to_column() %>% 
+  as_tibble() %>% 
+  mutate( `Significatif` = if_else(`Pr(>|t|)` < 0.05, "Oui", "Non")) %>%
+  rename(`p-value` = `Pr(>|t|)`) %>% 
+  rename(Variable = rowname)
+  
+moist.coefs<- summary(moist)$coefficients %>% 
+  as.data.frame %>% rownames_to_column() %>% 
+  as_tibble() %>% 
+  mutate( `Significatif` = if_else(`Pr(>|t|)` < 0.05, "Oui", "Non")) %>%
+  rename(`p-value` = `Pr(>|t|)`) %>% 
+  rename(Variable = rowname)# %>% sort(decreasing = T) %>% as.data.frame()
+
+ph.coefs <- summary(ph)$coefficients %>% 
+  as.data.frame %>% rownames_to_column() %>% 
+  as_tibble() %>% 
+  mutate( `Significatif` = if_else(`Pr(>|t|)` < 0.05, "Oui", "Non")) %>%
+  rename(`p-value` = `Pr(>|t|)`) %>% 
+  rename(Variable = rowname)# %>% sort(decreasing = T) %>% as.data.frame()
+
+write.csv(nacl.coefs, "nacl.csv")
+write.csv(moist.coefs, "moist.csv")
+write.csv(ph.coefs, "ph.csv")
+
+#coefs <- cbind(ph.coefs, nacl.coefs, moist.coefs)
+#colnames(coefs) <- c("pH ~", "NaCl ~", "Moisture ~")
+#write_csv(x = coefs, file = here("coefs_taxa.csv"))
+```
+

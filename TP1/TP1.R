@@ -1,29 +1,47 @@
-## ----setup, include=FALSE------------------------------------------------------------------------
-knitr::opts_chunk$set(echo = F, warning = F, message = F)
+#!/usr/bin/env Rscript
 
+rm(list=objects())
+graphics.off()
 
-## ----lib.import----------------------------------------------------------------------------------
-library(matR)
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager", quietly = TRUE)
+BiocManager::install("qvalue")
+list.of.packages <-c('devtools','RJSONIO','ecodist','gplots','scatterplot3d','usethis', 'httr','rcmdcheck','roxygen2','rversions')
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+library(devtools)
 library(tidyverse)
-library(reshape2)
+install_github(repo='MG-RAST/matR',quiet=T)
+rm(list.of.packages,new.packages)
 
+# Différents types de croûte : naturel, lavé, et fleuri.
+# Un fromage est plus acide que le lait. On observe le PH.
+# On a aussi du sel ajouté dans le fromage, qui va influencer la composition bactérienne.
+# Pasteurisé => influence initialement les bactéries.
+# On a des fromages de moutons, chèvres et vaches.
 
-## ----data.import---------------------------------------------------------------------------------
-metadata.df <- read.table("MetadataCheese.csv", header = T)
-metadata.tb <- tibble(metadata.df)
+library(matR)
 
-#List des accessions associées à l'étude mgp3362 
-# (2 échantillons absents des métadonnées)
-list_mgp3362<-metadata("mgp3362")$mgp3362
-list_mgp3362<-list_mgp3362[c(-11,-22)]
-#Récupération des données taxonomiques (request='organism') depuis les hits
-#de la base de données RDP (source='RDP') au niveau de l'ordre (group_level='order')
-#avec une evalue de 1e-15 (evalue=15)
-biom_phylum<-biomRequest(list_mgp3362,request="organism",source="RDP",
-group_level="order",evalue=15,wait=TRUE)
+## Loading required package: MGRASTer
+## MGRASTer (0.9 02e288)
+## Loading required package: BIOM.utils
+## BIOM.utils (0.9 dbcb27)
+## matR: metagenomics analysis tools for R (0.9.1)
+## List des accessions associées à l'étude mgp3362 (2 échantillons absents des métadonnées)
 
-#Transformation en matrice
-phylum.matrix <- as.matrix(biom_phylum)
+metadata.df <- read.table("TP1/MetadataCheese.csv", header = T)
+
+list_mgp3362 <- metadata("mgp3362")$mgp3362
+list_mgp3362 <- list_mgp3362[c(-11,-22)]
+
+## Récupération des données taxonomiques (request='organism') depuis les hits
+## de la base de données RDP (source='RDP') au niveau de l'ordre (group_level='order')
+## avec une evalue de 1e-15 (evalue=15)
+biom_phylum <- biomRequest(list_mgp3362, request="organism", source="RDP",
+                           group_level="order", evalue=15, wait=TRUE)
+
+exp.number <- ncol(biom_phylum)
+
 clean_data_frame <- function(my.matrix){
   #' Convert a matrix to a dataframe, 
   #' eliminating null columns
@@ -34,86 +52,284 @@ clean_data_frame <- function(my.matrix){
   return(.df[, !colnames(.df) %in% .cols.to.drop])
 }
 
-phylum.df <- clean_data_frame(phylum.matrix)
-phylum.tb <- phylum.df %>% rownames_to_column("Strain") %>% as_tibble()
+phylum.df <- clean_data_frame(as.matrix(biom_phylum))
+phylum.probs <- apply(phylum.df, 2, function(x){ x / sum(x)})
+OTU <- row.names(phylum.df)
+names(OTU) <- NULL
 
+# Calcul de la diversité alpha
 
-## ----rarefaction.curve---------------------------------------------------------------------------
-otus <- phylum.tb %>% select(Strain) %>% unlist
-names(otus) <- NULL
-phylum.prob.df <- apply(phylum.df, 2, function(x){ x / sum(x)})
-
-
-rarefactions.ls <- list()
-for (i in 1:ncol(phylum.df)){
-  .n.taxa <- c()
-  .n.seq <- c()
-  for (j in seq(1, 10000, 50)){
-    .tax <- sample(
-      otus, j, prob = phylum.prob.df[,i], replace = T
-    ) %>% unique() %>% length()
-    .n.taxa <- c(.n.taxa, .tax)
-    .n.seq <- c(.n.seq, j)
+compute_OTU_size <- function(phylum.exp){
+  phylum.exp.probs <-phylum.exp/sum(phylum.exp)
+  OTU.size <- c()
+  sample.size <- seq(0,sum(phylum.exp), by=20)
+  for (k in sample.size){
+    OTU.size.k <- replicate(100, sample(OTU, k, prob = phylum.exp.probs, replace = TRUE) %>% unique() %>% length())
+    OTU.size <- c(OTU.size,mean(OTU.size.k))
   }
-  rarefactions.ls[[i]] <- tibble(nSeq=.n.seq, nOTU=.n.taxa)
+  compute_OTU_size <- data.frame(sample.size, OTU.size)
 }
 
-rarefactions.ls[[2]] %>% 
-  ggplot(aes(x=nSeq, y=nOTU)) + geom_line() + geom_smooth()
+rarefaction_curves <- list()
 
+color.rarefaction_curves <- c(rep("blue",4),
+                              "red",rep("blue",3),
+                              rep("red",3),"blue",
+                              rep("blue",3),"red",
+                              "red",rep("blue",3),
+                              "red","blue")
 
-## ----shannon-------------------------------------------------------------------------------------
-H <- function(x){ 
+require(gridExtra)
+
+for (k in 1:exp.number){
+  
+  OTU.size <- compute_OTU_size(phylum.df[,k])
+  names(OTU.size) <- c("sample_size", "OTU_size")
+  
+  rarefaction_curves[[k]] <- ggplot(data = OTU.size, aes(x = sample_size, y = OTU_size)) +
+    geom_line(color = color.rarefaction_curves[k]) +
+    xlab(paste("Nombre de séquences (éch. ",k, ")", sep="")) + ylab("Nombre OTU") +
+    theme_classic(base_size = 11)
+  if (k%%4==0){
+    grid.arrange(rarefaction_curves[[k-3]],
+                 rarefaction_curves[[k-2]],
+                 rarefaction_curves[[k-1]],
+                 rarefaction_curves[[k]],
+                 ncol=2, nrow=2,
+                 top = "Diversité alpha")
+  }
+  if (k == exp.number){
+    grid.arrange(rarefaction_curves[[k-1]],
+                 rarefaction_curves[[k]],
+                 ncol=2, nrow=2,
+                 top = "Diversité alpha")
+  }
+}
+
+rm(rarefaction_curves, color.rarefaction_curves)
+
+# Calcul de l'entropie de Shannon
+
+entropy <- function(probs.df){ 
   #' Shannon's entropy
-  p <- x[x > 0] 
-  - sum(p * log(p)) 
+  probs.clean <- probs.df[probs.df > 0] 
+  - sum(probs.clean * log(probs.clean)) 
 }
 
-apply(phylum.prob.df, 2, H)
+entropy <- apply(phylum.probs, 2, entropy)
+print("The Shannon's entropies are:")
+print(entropy)
+rm(entropy)
 
+## 2.2 Analyse des facteurs structurants la communauté
 
-## ----pca.lda-------------------------------------------------------------------------------------
-#Chargement du package MASS
+library(FactoMineR)
+library(factoextra)
+
+# phylum.df.normalize <- t(scale(as.matrix(phylum.df), scale = TRUE))
+# res.pca <- PCA(phylum.df.normalize, scale.unit = FALSE, ncp = 6, graph = FALSE)
+
+res.pca <- PCA(t(phylum.probs), scale.unit = FALSE, ncp = 4, graph = FALSE)
+
+rind <- metadata.df$RindType
+rind.df <- as.data.frame(rind)
+rind.df <- as.factor(rind.df$rind)
+
+fviz_pca_ind(res.pca,
+             geom="point",
+             axes = c(1, 2),
+             pointsize=2,
+             habillage = rind.df,
+             invisible="quali",
+) + labs(title="PCA (rind type)")
+
+milk <- metadata.df$Milk
+milk.df <- as.data.frame(milk)
+milk.df <- as.factor(milk.df$milk)
+
+fviz_pca_ind(res.pca,
+             geom="point",
+             axes = c(1, 2),
+             pointsize=2,
+             habillage = milk.df,
+             invisible="quali",
+) + labs(title="PCA (milk)")
+
+pasteurized <- metadata.df$Pasteurized
+pasteurized.df <- as.data.frame(pasteurized)
+pasteurized.df <- as.factor(pasteurized.df$pasteurized)
+
+fviz_pca_ind(res.pca,
+             geom="point",
+             axes = c(1, 2),
+             pointsize=2,
+             habillage = rind.df,
+             invisible="quali",
+) + labs(title="PCA (rind type)")
+
+# LDA sans normalisation
+
 library(MASS)
-## NB la matrice de données doit être transformée
-LDA<-lda(x=t(phylum.matrix),grouping=metadata.df$Pasteurized)
 
-## Calcul des valeurs pour chaque groupe
-LDA1_RawMilk <- colSums(apply(phylum.matrix[,metadata.df$Pasteurized=='N'],2,
-function(x){LDA$scaling*x}))
+### Pasteurisation ###
 
-LDA1_Pasteurized<-colSums(apply(phylum.matrix[,metadata.df$Pasteurized=='Y'],2,
-function(x){LDA$scaling*x}))
+res.lda.pasteurized <- lda(x=t(phylum.df), grouping = pasteurized)
 
-#Représentation sous forme d'histogramme
-plot.new()
-hist(LDA1_Pasteurized, xlim=c(min(LDA1_RawMilk)-4, max(LDA1_Pasteurized)+1),
-     col='green', xlab='LD1 means', ylab='Frequency', main='Predicted Values'
-)
+decision.lda.pasteurized <- as.data.frame(colSums(res.lda.pasteurized$scaling * phylum.df))
+names(decision.lda.pasteurized) <- "mean"
 
-hist(LDA1_RawMilk,col='red',add=T)
-legend('topleft',pch=19,col=c('red','green'),legend = c('Raw','Pasteurized'))
+ggplot(data = decision.lda.pasteurized, aes(x = mean, fill=pasteurized)) + 
+  geom_histogram(aes(y=..density..), color="#e9ecef", alpha=0.6, position = 'identity', bins = 18) +
+  scale_fill_manual(values=c("#69b3a2", "#404080")) +
+  theme_classic(base_size = 11) +
+  labs(fill="Pasteurized")
 
-
-
-## ----other.plot----------------------------------------------------------------------------------
 par(mar=c(15,5,5,5))
-barplot(LDA$scaling[,1],names.arg = rownames(LDA$scaling),las=2,
-col='black',cex.names = 0.76)
+barplot(res.lda.pasteurized$scaling[,1],names.arg = rownames(res.lda.pasteurized$scaling),las=2,
+        col='black',cex.names = 0.76)
+
+### Milk ###
+
+res.lda.milk <- lda(x=t(phylum.df), grouping = milk)
+
+decision.lda.milk <- as.data.frame(colSums(res.lda.milk$scaling * phylum.df))
+names(decision.lda.milk) <- "mean"
+
+ggplot(data = decision.lda.milk, aes(x = mean, fill=milk)) + 
+  geom_histogram(aes(y=..density..), color="#e9ecef", alpha=0.6, position = 'identity', bins = 18) +
+  scale_fill_manual(values=c("#69b3a2", "#404080", "red")) +
+  theme_classic(base_size = 15) +
+  labs(fill="Pasteurized")
+
+par(mar=c(15,5,5,5))
+barplot(res.lda.milk$scaling[,1],names.arg = rownames(res.lda.milk$scaling),las=2,
+        col='black',cex.names = 0.76)
+
+### Milk ###
+
+res.lda.rind <- lda(x=t(phylum.df), grouping = rind)
+
+decision.lda.rind <- as.data.frame(colSums(res.lda.rind$scaling * phylum.df))
+names(decision.lda.rind) <- "mean"
+
+ggplot(data = decision.lda.rind, aes(x = mean, fill=rind)) + 
+  geom_histogram(aes(y=..density..), color="#e9ecef", alpha=0.6, position = 'identity', bins = 18) +
+  scale_fill_manual(values=c("#69b3a2", "#404080", "red")) +
+  theme_classic(base_size = 15) +
+  labs(fill="Rind type")
+
+par(mar=c(15,5,5,5))
+barplot(res.lda.rind$scaling[,1],names.arg = rownames(res.lda.rind$scaling),las=2,
+        col='black',cex.names = 0.76)
+
+# LDA avec utilisation des quatre premières composantes principales
+
+### Pasteurisation ###
+
+res.lda.pasteurized <- lda(x=res.pca$ind$coord, grouping = pasteurized)
+
+decision.lda.pasteurized <- as.data.frame(colSums(res.lda.pasteurized$scaling * phylum.df))
+names(decision.lda.pasteurized) <- "mean"
+
+ggplot(data = decision.lda.pasteurized, aes(x = mean, fill=pasteurized)) + 
+  geom_histogram(aes(y=..density..), color="#e9ecef", alpha=0.6, position = 'identity', bins = 18) +
+  scale_fill_manual(values=c("#69b3a2", "#404080")) +
+  theme_classic(base_size = 11) +
+  labs(fill="Pasteurized")
+
+par(mar=c(15,5,5,5))
+barplot(res.lda.pasteurized$scaling[,1],names.arg = rownames(res.lda.pasteurized$scaling),las=2,
+        col='black',cex.names = 0.76)
+
+### Milk ###
+
+res.lda.milk <- lda(x=res.pca$ind$coord, grouping = milk)
+
+decision.lda.milk <- as.data.frame(colSums(res.lda.milk$scaling * phylum.df))
+names(decision.lda.milk) <- "mean"
+
+ggplot(data = decision.lda.milk, aes(x = mean, fill=milk)) + 
+  geom_histogram(aes(y=..density..), color="#e9ecef", alpha=0.6, position = 'identity', bins = 18) +
+  scale_fill_manual(values=c("#69b3a2", "#404080", "red")) +
+  theme_classic(base_size = 15) +
+  labs(fill="Pasteurized")
+
+par(mar=c(15,5,5,5))
+barplot(res.lda.milk$scaling[,1],names.arg = rownames(res.lda.milk$scaling),las=2,
+        col='black',cex.names = 0.76)
+
+### Rind ###
+
+res.lda.rind <- lda(x=res.pca$ind$coord, grouping = rind)
+
+decision.lda.rind <- as.data.frame(colSums(res.lda.rind$scaling * phylum.df))
+names(decision.lda.rind) <- "mean"
+
+ggplot(data = decision.lda.rind, aes(x = mean, fill=rind)) + 
+  geom_histogram(aes(y=..density..), color="#e9ecef", alpha=0.6, position = 'identity', bins = 18) +
+  scale_fill_manual(values=c("#69b3a2", "#404080", "red")) +
+  theme_classic(base_size = 15) +
+  labs(fill="Rind type")
+
+par(mar=c(15,5,5,5))
+barplot(res.lda.rind$scaling[,1],names.arg = rownames(res.lda.rind$scaling),las=2,
+        col='black',cex.names = 0.76)
 
 
-## ----acp-----------------------------------------------------------------------------------------
-#lda(x=t(phylum_matrix),grouping=metadata$Pasteurized)
-pca_res <- acp <- prcomp(t(phylum.prob.df), scale = F)
-biplot(acp)
-acp$x[,1:2] %>% as.data.frame() %>% ggplot(aes(PC1, PC2)) + geom_point()
+# LDA avec normalisation
 
-var_explained <- pca_res$sdev^2/sum(pca_res$sdev^2)
-pca_res$x %>% 
-  as.data.frame %>%
-  ggplot(aes(x=PC1,y=PC2)) + geom_point(size=4) +
-  theme_bw(base_size=32) + 
-  labs(x=paste0("PC1: ",round(var_explained[1]*100,1),"%"),
-       y=paste0("PC2: ",round(var_explained[2]*100,1),"%")) +
-  theme(legend.position="top")
+### Pasteurisation ###
+
+res.lda.rind <- lda(x=t(phylum.df), grouping = rind)
+
+phylum.normalize.df <- t(scale(as.matrix(phylum.df), scale = TRUE))
+
+res.lda.pasteurized <- lda(x=t(phylum.normalize.df), grouping = pasteurized)
+
+decision.lda.pasteurized <- as.data.frame(colSums(res.lda.pasteurized$scaling * phylum.df))
+names(decision.lda.pasteurized) <- "mean"
+
+ggplot(data = decision.lda.pasteurized, aes(x = mean, fill=pasteurized)) + 
+  geom_histogram(aes(y=..density..), color="#e9ecef", alpha=0.6, position = 'identity', bins = 18) +
+  scale_fill_manual(values=c("#69b3a2", "#404080")) +
+  theme_classic(base_size = 11) +
+  labs(fill="Pasteurized")
+
+par(mar=c(15,5,5,5))
+barplot(res.lda.pasteurized$scaling[,1],names.arg = rownames(res.lda.pasteurized$scaling),las=2,
+        col='black',cex.names = 0.76)
+
+### Milk ###
+
+res.lda.milk <- lda(x=res.pca$ind$coord, grouping = milk)
+
+decision.lda.milk <- as.data.frame(colSums(res.lda.milk$scaling * phylum.df))
+names(decision.lda.milk) <- "mean"
+
+ggplot(data = decision.lda.milk, aes(x = mean, fill=milk)) + 
+  geom_histogram(aes(y=..density..), color="#e9ecef", alpha=0.6, position = 'identity', bins = 18) +
+  scale_fill_manual(values=c("#69b3a2", "#404080", "red")) +
+  theme_classic(base_size = 15) +
+  labs(fill="Pasteurized")
+
+par(mar=c(15,5,5,5))
+barplot(res.lda.milk$scaling[,1],names.arg = rownames(res.lda.milk$scaling),las=2,
+        col='black',cex.names = 0.76)
+
+### Rind ###
+
+res.lda.rind <- lda(x=res.pca$ind$coord, grouping = rind)
+
+decision.lda.rind <- as.data.frame(colSums(res.lda.rind$scaling * phylum.df))
+names(decision.lda.rind) <- "mean"
+
+ggplot(data = decision.lda.rind, aes(x = mean, fill=rind)) + 
+  geom_histogram(aes(y=..density..), color="#e9ecef", alpha=0.6, position = 'identity', bins = 18) +
+  scale_fill_manual(values=c("#69b3a2", "#404080", "red")) +
+  theme_classic(base_size = 15) +
+  labs(fill="Rind type")
+
+par(mar=c(15,5,5,5))
+barplot(res.lda.rind$scaling[,1],names.arg = rownames(res.lda.rind$scaling),las=2,
+        col='black',cex.names = 0.76)
 

@@ -1,0 +1,92 @@
+---
+title: "Métataxonomie des bactéries du fromage"
+author: 
+  - "MAGAÑA LOPEZ Gustavo"
+  - "RONCALLI Théo"
+date: "01/12/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, message = F, warning = F)
+```
+
+```{r libs}
+library(tidyverse)
+library(here)
+```
+
+Les fromages sont métabolisés par une très grande multitude de micro-organismes. Les compositions microbiennes ainsi que les diversités des communautés bactériennes diffèrent entre les croûtes de différents fromages. Dans le présent projet, nous nous intéresserons uniquement à la composition bactérienne et feront abstraction des champignons présents dans cet environnement. L’objectif de ce projet est d’étudier la métagénomique des croûtes de fromage en nous questionnant sur les différents facteurs impliqués dans la composition bactérienne de ceux-ci. Pour répondre à cette problématique, nous utilisons un jeu de données récupéré sur la base MGRAST fournissant la métataxonomie des croûtes de fromage et un fichier CSV fournissant les métadonnées associées à ces croûtes de fromage.
+
+## Estimation de la diversité bactérienne
+
+Avant d’étudier les facteurs d’influence de la composition microbienne des croûtes de fromage, il est nécessaire d’étudier la diversité microbienne. De manière générale, nous remarquons que les croûtes de fromages sont composés principalement, dans l’ordre décroissant, d’actinomycetales, d’oceanospirillales, de bacillales, de pseudomonadales et d’alteromonadales.  Également, il y a de très nombreux micro-organismes dans ces environnements dont nous ne sommes pas capables aujourd’hui de déterminer leur phylum avec précision.
+
+Dans notre jeu de données, nous travaillons sur 22 échantillons provenant chacun de différentes croûtes de fromage. Pour vérifier que nos échantillons captent bien toute la diversité microbienne, nous nous intéressons à la diversité alpha en traçant les courbes de raréfaction. Nous considérons les Operational Taxonomic Units (OTU) contre le nombre de reads obtenus. Pour tracer la courbe de raréfaction, nous avons rééchantillonné avec remise les OTU selon leur probabilité d'occurrence dans la croûte de fromage. Ce ré-échantillonnage a été répliqué 500 fois pour chaque croûte de fromage et pour chaque nombre d’OTU à tirer, puis nous avons calculé la moyenne. Les courbes de raréfaction pour chaque type de fromage sont disponibles dans la `Figure 1`. Nous remarquons que certaines expériences ont atteint un plateau, c’est-à-dire que la diversité microbienne a été capturée. Cela n’est pas le cas pour tous les échantillons tels que mgm4524486, mgm4524490, mgm4524491, mgm4524493, mgm4524498, mgm4524499, mgm4524504. Notons également que certaines croûtes de fromage ont une diversité bactérienne plus importante que les autres, en particulier le fromage de vache lavé non pasteurisé de Virginie (mgm4524495) qui capte plus d’une vingtaine d’OTU.
+
+Un autre moyen de mesurer la diversité alpha est le calcul de l’entropie de Shannon. L’entropie de Shannon se calcule comme suit:
+
+$$
+H' = \sum\limits_{i=1}^{R} p_{i} ln(p_i)
+$$
+
+
+Plus l’entropie de Shannon est élevée, plus la diversité bactérienne est importante. La table ci-dessous reporte l’ensemble des entropie de Shannon pour chaque expérience. Nous remarquons que globalement, les expériences dont l’entropie de Shannon est faible n’ont pas atteint de plateau avec la courbe de raréfaction, tels que pour les expériences mgm4524498 et mgm4524499 dont l’entropie de Shannon est inférieure à $0.4$.
+\newpage
+
+```{r, echo=FALSE, out.width="70%", fig.cap="Diversité Alpha", fig.align='center'}
+knitr::include_graphics(here("diversite_alpha.png"))
+```
+
+
+```{r entropie}
+read.csv(here("H.csv")) %>% rename(`H'` = H) %>% knitr::kable(caption = "Entropie de Shannon")
+```
+
+Également, nous avons effectué une régression linéaire avec l’entropie de Shannon comme variable d’intérêt (voir **Annexe**) contre diverses autres variables. Presque la quasi-totalité des variables n’explique pas l’entropie de Shannon de manière significative au seuil de 5%. Néanmoins, l’humidité explique significativement et positivement la diversité bactérienne  au seuil de significativité de $1\%$ ($p.value = 0.5\%$).
+
+
+
+\newpage
+## Analyse des facteurs structurants la communauté
+
+Nous souhaitons maintenant étudier les facteurs influençant la composition des communautés bactériennes des croûtes de fromage. Pour étudier cela, nous avons dans un premier temps effectué des ACP mais ses résultats ne permettaient pas de discriminer les croûtes de fromage selon leur caractéristiques physico-chimiques. Par conséquent, nous avons effectué des LDA dont les résultats permettent effectivement de créer des clusters selon le type de fromage. Nous remarquons que la LDA permet de bien discriminer les fromages pasteurisés et non pasteurisés, ainsi que les fromages lavés et non lavés mais également les fromages selon le type de lait utilisé (vache, brebis, chèvre). De plus, ces groupes concernent un nombre relativement homogène d’observations, à l’exception du fromage de brebis qui correspond à une seule observation.
+
+
+```{r, echo=FALSE, out.width="80%", fig.cap="LDA for Pasteurized, Rind Type and Milk Type ", fig.align='center'}
+knitr::include_graphics(here("lda.png"))
+```
+
+Nous avons également réalisé des régressions linéaires (voir **Annexe**) pour évaluer les taxons bactériens responsables de la diversité des fromages. Néanmoins, nous avons de nombreux OTU et seulement 22 observations. Comme le modèle doit avoir un nombre de degrés de liberté positif, il est nécessaire de retirer certaines variables. Nous avons choisi de prendre les huit OTU les plus présents comme variables explicatives, en veillant à exclure les OTU non classifiés. Par exemple, nous n’avons pas pris l’OTU qui considère que c’est une bactérie mais ne donne pas davantage d’informations sur le phylum (cette variable contient différents phylums). Nous avons ajusté trois modèles linéaires sur les OTU. Les variables d’intérêt utilisées sont la basicité du fromage (ph), la concentration de sodium et l’humidité. Pour la basicité et la concentration de sodium dans la croûte du fromage, nous n’avons obtenu aucun résultat significatif. En revanche, nous remarquons que l’OTU bifidobacteriales a un effet significatif négatif au seuil de 1% sur l’humidité de la croûte du fromage et les OTU bacillales et pseudomonadales ont un effet significatif négatif et positif respectivement au seuil de significativité de 5%.
+
+
+## Conclusion
+
+De manière générale, nous remarquons que les croûtes de fromage ont une composition bactérienne différente mais également une diversité bactérienne. Certains fromages sont composés de phylums que d’autres n’ont pas. Nous remarquons également que la diversité bactérienne de la croûte de fromage est positivement influencée par l’humidité. Nous avons également observé que la pasteurisation, le type de fromage (lavé ou non) et le type de lait utilisé (vache, brebis, chèvre) ont une influence sur la composition bactérienne. Également, nous remarquons que la proportion de certaines bactéries dans la croûte du fromage ont un effet significatif sur l’humidité de la croûte.
+
+\newpage
+## Annexe
+
+```{r}
+reg <- read.csv(here("shannonreg.csv"))
+reg <- reg[, 2:ncol(reg)]
+reg %>% knitr::kable(caption = "Ajustement d'une régression linéaire sur l'entropie de Shannon")
+```
+
+```{r}
+reg <- read.csv(here("TP1/moist.csv"))
+reg <- reg[, 2:ncol(reg)]
+reg %>% knitr::kable(caption = "Ajustement d'une régression linéaire sur l'Humidité")
+```
+
+```{r}
+reg <- read.csv(here("TP1/nacl.csv"))
+reg <- reg[, 2:ncol(reg)]
+reg %>% knitr::kable(caption = "Ajustement d'une régression linéaire sur la concentration de sodium")
+```
+\newpage
+```{r}
+reg <- read.csv(here("TP1/ph.csv"))
+reg <- reg[, 2:ncol(reg)]
+reg %>% knitr::kable(caption = "Ajustement d'une régression linéaire sur le pH")
+```
