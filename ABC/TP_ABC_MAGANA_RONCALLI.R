@@ -9,12 +9,18 @@
 #' ---
 #'
 
+#### Loading dependencies ####
+
+rm(list=objects())
+graphics.off()
+
 #+ echo=F, message=F, warning=F
 # declare dependencies
 .dependencies <- 
   c("here", "abc", "coala", 
     "magrittr", "ggplot2", "dplyr",
-    "tibble", "foreach", "doRNG"
+    "tibble", "foreach", "doRNG",
+    "RColorBrewer", "gridExtra"
     )
 new.packages <- 
   .dependencies[!(.dependencies %in% installed.packages()[,"Package"])]
@@ -36,7 +42,6 @@ for (pop in unique(realdata$info$POP)) {
   # subset the dataset
   pop.subset <- select.label(realdata, label = pop)
   # compute estimates
-  
   size.norm.factor <- pop.subset$region_bp_lim[2] - pop.subset$region_bp_lim[1]
   theta_watterson <- calculate.thetaW(pop.subset$segsites) / size.norm.factor
   theta_tajima <- calculate.thetaPi(pop.subset$segsites) / size.norm.factor
@@ -59,7 +64,6 @@ loaded
 # [1] "sumstats.expeA" "models.expeA"   "params.bott"
 # sapply(loaded, function(x){ str(eval(as.symbol(x))) }, simplify = T)
 
-
 #' Data analysis
 dim(sumstats.expeA)
 head(sumstats.expeA) # each line is a set of parameters... for a different model ?
@@ -68,16 +72,50 @@ head(models.expeA)
 dim(params.bott)  
 head(params.bott)
 
-
 # Visualise model parameters
-{
-  par(mfrow=c(1,3))
-  boxplot(sumstats.expeA$pi~models.expeA)
-  boxplot(sumstats.expeA$tajimas_d~models.expeA)
-  boxplot(sumstats.expeA$tajimas_d_var~models.expeA)
-  par(mfrow=c(1,1))
-}
 
+aggregated.expeA <- cbind(sumstats.expeA, models.expeA)
+colnames(aggregated.expeA) <- c("Theta.Tajima", "D.Tajima", "Var.D.Tajima", "Type")
+
+boxplot.theta_tajima <- ggplot(aggregated.expeA, aes(x=Type, y=Theta.Tajima)) +
+  geom_boxplot(outlier.colour="black", outlier.shape=16,
+               outlier.size=2, notch=FALSE,
+               fill=brewer.pal(3, "Dark2"), color="black") +
+  ylab("Theta Tajima") +
+  xlab("Type") +
+  theme_classic()
+
+paste(here("ABC/Figures"), "boxplot_Theta_Tajima.png", sep="/") %>%
+  ggsave(plot = boxplot.theta_tajima, width = 6, height = 5)
+
+boxplot.d_tajima <- ggplot(aggregated.expeA, aes(x=Type, y=D.Tajima)) +
+  geom_boxplot(outlier.colour="black", outlier.shape=16,
+               outlier.size=2, notch=FALSE,
+               fill=brewer.pal(3, "Dark2"), color="black") +
+  ylab("D Tajima") +
+  xlab("Type") +
+  theme_classic()
+
+paste(here("ABC/Figures"), "boxplot_D_Tajima.png", sep="/") %>%
+  ggsave(plot = boxplot.d_tajima, width = 6, height = 5)
+
+boxplot.var_d_tajima <- ggplot(aggregated.expeA, aes(x=Type, y=Var.D.Tajima)) +
+  geom_boxplot(outlier.colour="black", outlier.shape=16,
+               outlier.size=2, notch=FALSE,
+               fill=brewer.pal(3, "Dark2"), color="black") +
+  ylab("Variance (D Tajima)") +
+  xlab("Type") +
+  theme_classic()
+
+paste(here("ABC/Figures"), "boxplot_Var_D_Tajima.png", sep="/") %>%
+  ggsave(plot = boxplot.var_d_tajima, width = 6, height = 5)
+
+aggregated_boxplot_tajima <- grid.arrange(boxplot.theta_tajima, boxplot.d_tajima, boxplot.var_d_tajima, ncol=3)
+
+paste(here("ABC/Figures"), "Aggregated_boxplot_tajima.png", sep="/") %>%
+  ggsave(plot = aggregated_boxplot_tajima, width = 6, height = 5)
+
+rm(boxplot.theta_tajima, boxplot.d_tajima, boxplot.var_d_tajima, aggregated_boxplot_tajima)
 
 # Explore main ABC function
 ?postpr
