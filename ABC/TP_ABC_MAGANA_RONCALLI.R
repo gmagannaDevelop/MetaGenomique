@@ -130,7 +130,7 @@ misclassif.reject
   
   
 # Parallel gridsearch
-source(here("ABC/"))
+source(here("ABC/customfuncs.R"))
 cl <- makeCluster(parallel::detectCores())
 registerDoParallel(cl)
 set.seed(1234)
