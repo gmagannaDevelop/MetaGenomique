@@ -1,6 +1,9 @@
 # drafts
 /**/draft.R
 
+# Installation
+Packages
+
 # Heavy data files, we'll include the compressed version
 /**/*txt.haps
 
@@ -53,6 +56,7 @@ vignettes/*.pdf
 
 # Temporary files created by R markdown
 *.utf8.md
+
 *.knit.md
 
 # R Environment Variables
