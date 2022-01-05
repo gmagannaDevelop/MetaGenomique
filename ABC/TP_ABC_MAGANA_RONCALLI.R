@@ -14,7 +14,7 @@
 .dependencies <- 
   c("here", "abc", "coala", 
     "magrittr", "ggplot2", "dplyr",
-    "tibble"
+    "tibble", "foreach", "doRNG"
     )
 new.packages <- 
   .dependencies[!(.dependencies %in% installed.packages()[,"Package"])]
@@ -27,7 +27,7 @@ source(here("ABC/Fonctions_TP_demo_real.R")) # this script has slighly changed s
 hap.fname <- here("ABC/chr22.CG_54genomes_shapeit_phased.txt.haps")
 info.fname <- here("ABC/CG_54genomes_indiv.txt")
 realdata <- read.hap.geno(hap.input=hap.fname, info.input = info.fname)
-
+set.seed(1234)
 
 
 # sumstats
@@ -57,7 +57,7 @@ stat.1000g.tb <- stat.1000g %>% rownames_to_column("Population") %>% tibble()
 loaded <- load(file = here("ABC/simu.expeA.RData"))
 loaded
 # [1] "sumstats.expeA" "models.expeA"   "params.bott"
-sapply(loaded, function(x){ str(eval(as.symbol(x))) }, simplify = F)
+# sapply(loaded, function(x){ str(eval(as.symbol(x))) }, simplify = T)
 
 
 #' Data analysis
@@ -83,19 +83,69 @@ head(params.bott)
 ?postpr
 
 
-# Explore 
-random_idx <- 
-  sample.int(length(models.expeA), size = 1)
-random_idx
+# Explore
+{
+  random_idx <- 
+    sample.int(length(models.expeA), size = 1)
+  random_idx
+  
+  abc.mod.sel <- postpr(
+    target = sumstats.expeA[random_idx,],   # pseudo-observed sumstats
+    index = models.expeA[-random_idx],      # known models for reference db
+    sumstat = sumstats.expeA[-random_idx,], # sumstats for reference db
+    method = 'rejection',                   # type of ABC algorithm
+    tol=0.05                                #
+  )
+  prob <- summary(abc.mod.sel)$Prob
+  prob
+}
 
-abc.mod.sel <- postpr(
-  target = sumstats.expeA[random_idx,], # pseudo-observed sumstats
-  index = models.expeA[-random_idx], # known models for reference db
-  sumstat = sumstats.expeA[-random_idx,], # sumstats for reference db
-  method = 'rejection', # type of ABC algorithm
-  tol=0.05
-) # proportion of kept simulations
-prob <- summary(modsel)$Prob
-cat('ABC outputs the following posterior predictive probabilities:\n')
-print(prob)
+# Gridsearch
+  random_idx <- 
+    sample.int(length(models.expeA), size = 1)
+  random_idx
+  
+  abc.mod.sel <- postpr(
+    target = sumstats.expeA[random_idx,],   # pseudo-observed sumstats
+    index = models.expeA[-random_idx],      # known models for reference db
+    sumstat = sumstats.expeA[-random_idx,], # sumstats for reference db
+    method = 'rejection',                   # type of ABC algorithm
+    tol=0.05                                #
+  )
+  prob <- summary(abc.mod.sel)$Prob
+  prob
+  
+
+cv.modsel.reject <- cv4postpr(models.expeA, sumstats.expeA,
+                              nval=10,
+                              tols=c(.0005,.1,.5),
+                              method="rejection")
+# plot(cv.modsel) # matrice de confusion pour chaque seuil de toleranc
+misclassif.reject=list()
+for (tol in names(cv.modsel.reject$estim)) {
+  misclassif.reject[[tol]] = mean(cv.modsel.reject$estim[[tol]] != cv.modsel.reject$true)
+}
+misclassif.reject
+  
+  
+  
+# Parallel gridsearch
+source(here("ABC/"))
+cl <- makeCluster(parallel::detectCores())
+registerDoParallel(cl)
+set.seed(1234)
+tryCatch(
+  parallel.cv.modsel.df <- 
+    foreach(i=samples, .inorder = F, .combine = rbind, 
+            .export = c(), .packages = c("abc")
+    ) %dorng% {
+      # hola
+      for (j in seq_along(.nb.seq)){
+      #holaa
+      }
+  }, 
+  finally = stopCluster(cl)
+)
+
+
 
