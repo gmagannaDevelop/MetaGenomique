@@ -4,12 +4,27 @@ library(foreach)
 library(doParallel)
 library(doRNG)
 
+.mycomb <- function(x, ...) {
+  lapply(seq_along(x),
+         function(i) c(x[[i]], lapply(list(...), function(y) y[[i]])))
+}
+
 parallel_cv4postpr <- 
   function(index, sumstat, nval, tols, seed = 1234, subset = NULL){
   #' Like cv4postpr, but parallelised
   #' Why would you want to do this sequentially?
   #' see ?cv4postpr
   
+  mymodels <- levels(factor(index))
+  if (length(colnames(sumstat))) {
+    statnames <- colnames(sumstat)
+  }
+  else {
+    warning("No statistics names are given, using S1, S2, ...", 
+            call. = F, immediate = T)
+    statnames <- paste("S", 1:numstat, sep = "")
+  }  
+    
   gwt <- rep(TRUE, length(sumstat[, 1]))
   gwt[attributes(na.omit(sumstat))$na.action] <- FALSE
   if (is.null(subset)) 
@@ -20,17 +35,17 @@ parallel_cv4postpr <-
   tols <- sort(tols)
   allprobs <- list()
   
-  #.ncores <- min(parallel::detectCores(), length(tols))
-  #cl <- makeCluster(.ncores)
-  #registerDoParallel(cl)
+  .ncores <- min(parallel::detectCores(), length(tols))
+  cl <- makeCluster(.ncores)
+  registerDoParallel(cl)
   set.seed(seed)
   tol.iter <- iterators::iter(tols)
 tryCatch(
 {
   parallel.cv <- foreach(
-    tol=tols, .inorder = T, .packages = c("abc"),
-    .combine = c
-  ) %do% {
+    mytol=tols, .inorder = T, .packages = c("abc"), .combine = c,
+    .init = allprobs
+  ) %dorng% {
     res <- matrix(ncol = length(unique(index)), nrow = length(cvsamp))
     for (i in seq_along(cvsamp)){
       mysamp <- cvsamp[i]
@@ -39,21 +54,27 @@ tryCatch(
       myindex <- index[-mysamp]
       mysumstat <- sumstat[-mysamp, ]
       mysubset <- subset[-mysamp]
-      subres <- postpr(target = mytarget, index = myindex, 
-                       sumstat = mysumstat, tol = mytol, subset = mysubset)
-      res[i, ] <- summary.postpr(subres, print = F, ...)$Prob
+      subres <- postpr(
+        target = mytarget, 
+        index = myindex, 
+        sumstat = mysumstat, 
+        method = "rejection",
+        tol = mytol, 
+        subset = mysubset
+      )
+      res[i, ] <- summary(subres, print = F)$Prob
     }
     colnames(res) <- mymodels
     rownames(res) <- index[cvsamp]
-    allprobs[[paste("tol", mytol, sep = "")]] <- res
-    allnames <- 
-      lapply(allprobs, apply, 1, function(xx) mymodels[which(xx == max(xx))])
+    someprobs <- list()
+    someprobs[[paste("tol", mytol, sep = "")]] <- res
+    #allnames <- 
+    #  lapply(allprobs, apply, 1, function(xx) mymodels[which(xx == max(xx))])
     
-    res
-}
-  }, 
-  finally = print("ok")
-  #finally = stopCluster(cl)
+    someprobs
+  }
+}, 
+  finally = stopCluster(cl)
 )
   
   return(parallel.cv)
