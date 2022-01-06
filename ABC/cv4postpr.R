@@ -4,11 +4,6 @@ library(foreach)
 library(doParallel)
 library(doRNG)
 
-.mycomb <- function(x, ...) {
-  lapply(seq_along(x),
-         function(i) c(x[[i]], lapply(list(...), function(y) y[[i]])))
-}
-
 parallel_cv4postpr <- 
   function(index, sumstat, nval, tols, seed = 1234, subset = NULL){
   #' Like cv4postpr, but parallelised
@@ -33,7 +28,6 @@ parallel_cv4postpr <-
   cvsamp <- unlist(tapply(c(1:length(index))[gwt], index[gwt], 
                           sample, nval))
   tols <- sort(tols)
-  allprobs <- list()
   
   .ncores <- min(parallel::detectCores(), length(tols))
   cl <- makeCluster(.ncores)
@@ -42,9 +36,8 @@ parallel_cv4postpr <-
   tol.iter <- iterators::iter(tols)
 tryCatch(
 {
-  parallel.cv <- foreach(
-    mytol=tols, .inorder = T, .packages = c("abc"), .combine = c,
-    .init = allprobs
+  allprobs <- foreach(
+    mytol=tols, .inorder = T, .packages = c("abc"), .combine = c, .init = list()
   ) %dorng% {
     res <- matrix(ncol = length(unique(index)), nrow = length(cvsamp))
     for (i in seq_along(cvsamp)){
@@ -68,16 +61,37 @@ tryCatch(
     rownames(res) <- index[cvsamp]
     someprobs <- list()
     someprobs[[paste("tol", mytol, sep = "")]] <- res
-    #allnames <- 
-    #  lapply(allprobs, apply, 1, function(xx) mymodels[which(xx == max(xx))])
     
     someprobs
   }
 }, 
   finally = stopCluster(cl)
 )
+  allnames <- 
+    lapply(allprobs, apply, 1, function(xx) mymodels[which(xx == max(xx))])
   
-  return(parallel.cv)
+  seeds <- attr(allprobs, "rng")
+  doRNG_version <- attr(allprobs, "doRNG_version")
+  attr(allprobs, "rng") <- NULL
+  attr(allprobs, "doRNG_version") <- NULL
+  
+  cv4postpr.out <- list(
+    cvsamples = cvsamp, 
+    tols = tols, 
+    true = index[cvsamp], 
+    estim = allnames, 
+    model.probs = allprobs, 
+    method = "rejection", 
+    names = list(
+      models = mymodels, 
+      statistics.names = statnames
+    ), 
+    seeds = seeds,
+    doRNG_version = doRNG_version
+  )
+  
+  class(cv4postpr.out) <- "cv4postpr.parallel"
+  return(invisible(cv4postpr.out))
 }
 
 #  ind.fold <- sample(1:k_folds, nrow(df), replace=T)

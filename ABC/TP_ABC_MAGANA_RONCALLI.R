@@ -14,7 +14,7 @@
 .dependencies <- 
   c("here", "abc", "coala", 
     "magrittr", "ggplot2", "dplyr",
-    "tibble", "foreach", "doRNG"
+    "tibble", "foreach", "doRNG", "stringr"
     )
 new.packages <- 
   .dependencies[!(.dependencies %in% installed.packages()[,"Package"])]
@@ -116,36 +116,55 @@ head(params.bott)
   prob
   
 
-cv.modsel.reject <- cv4postpr(models.expeA, sumstats.expeA,
-                              nval=10,
-                              tols=c(.0005,.1,.5),
-                              method="rejection")
+cv4postpr(
+  index = models.expeA, 
+  sumstat = sumstats.expeA, 
+  nval=10, 
+  tols=c(.0005,.1,.5), 
+  method="rejection"
+) -> cv.modsel.reject
+
+parallel.cv.modsel.reject <- 
+  parallel_cv4postpr(
+    models.expeA, sumstats.expeA, nval=20, tols=seq(0.005, 0.95, length.out = 30)
+  )
+
+parallel.cv.modsel.reject2 <- 
+  parallel_cv4postpr(
+    models.expeA, sumstats.expeA, nval=20, 
+    tols=seq(0.005, 0.95, length.out = 30),
+    seed = 444
+  )
+
+parallel.cv.modsel.reject3 <- 
+  parallel_cv4postpr(
+    models.expeA, sumstats.expeA, nval=25, tols=seq(0.005, 0.95, length.out = 60)
+  )
+
 # plot(cv.modsel) # matrice de confusion pour chaque seuil de toleranc
-misclassif.reject=list()
-for (tol in names(cv.modsel.reject$estim)) {
-  misclassif.reject[[tol]] = mean(cv.modsel.reject$estim[[tol]] != cv.modsel.reject$true)
+compute_misclassif_from_cv_model <- function(cv.modsel.reject){
+  if (!require(stringr, quietly = T)){ 
+    stop("this function requires the package 'stringr'")
+  }
+  misclassif.reject <- list()
+  for (tol in names(cv.modsel.reject$estim)) {
+    misclassif.reject[[tol]] = mean(cv.modsel.reject$estim[[tol]] != cv.modsel.reject$true)
+  }
+  .tols <- as.numeric(str_remove(names(misclassif.reject), "tol"))
+  data.frame(tolerance=.tols, perc.misclassified=as.numeric(misclassif.reject))
 }
-misclassif.reject
-  
-  
+
+compute_misclassif_from_cv_model(cv.modsel.reject)  
+rej <- compute_misclassif_from_cv_model(parallel.cv.modsel.reject)  
+rej2 <- compute_misclassif_from_cv_model(parallel.cv.modsel.reject2)  
+rej3 <- compute_misclassif_from_cv_model(parallel.cv.modsel.reject3)  
+rej.full <- compute_misclassif_from_cv_model(parallel.cv.modsel.reject.full)  
+
+rej.full %>% ggplot(aes(x=tolerance, y=perc.misclassified)) + geom_point() + geom_smooth()
   
 # Parallel gridsearch
 source(here("ABC/customfuncs.R"))
-cl <- makeCluster(parallel::detectCores())
-registerDoParallel(cl)
-set.seed(1234)
-tryCatch(
-  parallel.cv.modsel.df <- 
-    foreach(i=samples, .inorder = F, .combine = rbind, 
-            .export = c(), .packages = c("abc")
-    ) %dorng% {
-      # hola
-      for (j in seq_along(.nb.seq)){
-      #holaa
-      }
-  }, 
-  finally = stopCluster(cl)
-)
+
 
 
 
