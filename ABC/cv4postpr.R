@@ -1,11 +1,13 @@
 
-library(abc)
-library(foreach)
-library(doParallel)
-library(doRNG)
+shhh <- suppressPackageStartupMessages # It's a library, so shhh!
+
+shhh(library(abc))
+shhh(library(foreach))
+shhh(library(doParallel))
+shhh(library(doRNG))
 
 parallel_cv4postpr <- 
-  function(index, sumstat, nval, tols, seed = 1234, subset = NULL){
+  function(index, sumstat, nval, tols, seed = 1234, subset = NULL, nthreads = NULL){
   #' Like cv4postpr, but parallelised
   #' Why would you want to do this sequentially?
   #' see ?cv4postpr
@@ -29,7 +31,12 @@ parallel_cv4postpr <-
                           sample, nval))
   tols <- sort(tols)
   
-  .ncores <- min(parallel::detectCores(), length(tols))
+  if (is.null(nthreads)){
+    .ncores <- min(parallel::detectCores(), length(tols))
+  } else {
+    .ncores <- min(nthreads, parallel::detectCores())
+  }
+
   cl <- makeCluster(.ncores)
   registerDoParallel(cl)
   set.seed(seed)

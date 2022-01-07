@@ -188,7 +188,7 @@ rej2 <- compute_misclassif_from_cv_model(parallel.cv.modsel.reject2)
 rej3 <- compute_misclassif_from_cv_model(parallel.cv.modsel.reject3)  
 rej.full <- compute_misclassif_from_cv_model(parallel.cv.modsel.reject.full)  
 
-rej.full %>% ggplot(aes(x=tolerance, y=perc.misclassified)) + geom_point() + geom_smooth()
+rej %>% ggplot(aes(x=tolerance, y=perc.misclassified)) + geom_point() + geom_smooth()
   
 # Parallel gridsearch
 source(here("ABC/customfuncs.R"))
