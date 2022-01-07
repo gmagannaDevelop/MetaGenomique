@@ -19,7 +19,7 @@ graphics.off()
 .dependencies <- 
   c("here", "abc", "coala", 
     "magrittr", "ggplot2", "dplyr",
-    "tibble", "foreach", "doRNG", "stringr"
+    "tibble", "foreach", "doRNG", "stringr",
     "RColorBrewer", "gridExtra"
     )
 new.packages <- 
