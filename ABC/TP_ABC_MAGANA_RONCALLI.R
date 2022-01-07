@@ -180,17 +180,7 @@ parallel.cv.modsel.reject3 <-
   )
 
 # plot(cv.modsel) # matrice de confusion pour chaque seuil de toleranc
-compute_misclassif_from_cv_model <- function(cv.modsel.reject){
-  if (!require(stringr, quietly = T)){ 
-    stop("this function requires the package 'stringr'")
-  }
-  misclassif.reject <- list()
-  for (tol in names(cv.modsel.reject$estim)) {
-    misclassif.reject[[tol]] = mean(cv.modsel.reject$estim[[tol]] != cv.modsel.reject$true)
-  }
-  .tols <- as.numeric(str_remove(names(misclassif.reject), "tol"))
-  data.frame(tolerance=.tols, perc.misclassified=as.numeric(misclassif.reject))
-}
+
 
 compute_misclassif_from_cv_model(cv.modsel.reject)  
 rej <- compute_misclassif_from_cv_model(parallel.cv.modsel.reject)  
