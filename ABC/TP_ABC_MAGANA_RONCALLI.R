@@ -35,9 +35,11 @@ info.fname <- here("ABC/CG_54genomes_indiv.txt")
 realdata <- read.hap.geno(hap.input=hap.fname, info.input = info.fname)
 set.seed(1234)
 
+source(here("ABC/customfuncs.R"))
+source(here("ABC/cv4postpr.R"))
 
 # sumstats
-stat.1000g <- NULL
+stat.1000g.df <- NULL
 for (pop in unique(realdata$info$POP)) {
   # subset the dataset
   pop.subset <- select.label(realdata, label = pop)
@@ -54,10 +56,12 @@ for (pop in unique(realdata$info$POP)) {
       Var.D.Tajima=tajimas_d_var,
       Theta.Watterson=theta_watterson
     )
-  stat.1000g <- rbind(stat.1000g, .pop.stats)
+  stat.1000g.df <- rbind(stat.1000g.df, .pop.stats)
 }
-rownames(stat.1000g) <- unique(realdata$info$POP)
-stat.1000g.tb <- stat.1000g %>% rownames_to_column("Population") %>% tibble()
+rownames(stat.1000g.df) <- unique(realdata$info$POP)
+stat.1000g <- stat.1000g.df[, 1:3]
+colnames(stat.1000g) <- c("pi", "tajimas_d", "tajimas_d_var")
+stat.1001g.tb <- stat.1000g %>% rownames_to_column("Population") %>% tibble()
 
 loaded <- load(file = here("ABC/simu.expeA.RData"))
 loaded
@@ -164,8 +168,17 @@ cv4postpr(
 
 parallel.cv.modsel.reject <- 
   parallel_cv4postpr(
-    models.expeA, sumstats.expeA, nval=20, tols=seq(0.005, 0.95, length.out = 30)
+    models.expeA, sumstats.expeA, nval=5, tols=seq(0.005, 0.95, length.out = 20)
   )
+
+cv.modsel.reject <- parallel.cv.modsel.reject
+misclassif.reject <- list()
+for (tol in names(cv.modsel.reject$estim)) {
+  misclassif.reject[[tol]] = mean(cv.modsel.reject$estim[[tol]] != cv.modsel.reject$true)
+}
+.tols <- as.numeric(str_remove(names(misclassif.reject), "tol"))
+data.frame(tolerance=.tols, perc.misclassified=as.numeric(misclassif.reject))
+
 
 parallel.cv.modsel.reject2 <- 
   parallel_cv4postpr(
@@ -189,10 +202,55 @@ rej3 <- compute_misclassif_from_cv_model(parallel.cv.modsel.reject3)
 rej.full <- compute_misclassif_from_cv_model(parallel.cv.modsel.reject.full)  
 
 rej %>% ggplot(aes(x=tolerance, y=perc.misclassified)) + geom_point() + geom_smooth()
+
+estimCEU <- stat.1000g[population, 1:3]
+
+gof_for_population <- function (population){
+  #' Calculate Goodness-of-fit for a given population
+  #' This function is partially hardcoded and therefore unreliable
+  #' Proceed with caution
   
-# Parallel gridsearch
-source(here("ABC/customfuncs.R"))
+  # We added a statistic which is not 
+  # present in sumstats, that's why we have to take 
+  # only the first three columns
+  estim_x <- stat.1000g[population, ] %>% as.matrix 
+  
+  modsel_x <- postpr(target = estim_x, # pseudo-observed sumstats
+                      index = models.expeA, # known models for reference db
+                      sumstat = sumstats.expeA, # sumstats for reference db
+                      method='rejection', # type of ABC algorithm
+                      tol=0.05) # proportion of kept simulations
+  
+  prob_x <- summary(modsel_x)$Prob
+  gof_x <- gfitpca(target = estim_x, # pseudo-observed sumstats
+                    index = models.expeA, # known models for reference db
+                    sumstat = sumstats.expeA, # sumstats for reference db
+                    main = glue::glue("ABC - goodness of fit - Pop : {population} "))
+  
+  list(
+    postpr.summary = summary(modsel_x),
+    posterior.probs = prob_x,
+    gfitpca = gof_x
+  )
+}
+
+pop.names <- as.list(rownames(stat.1000g)) 
+names(pop.names) <- pop.names
+gofs <- 
+  sapply(pop.names, gof_for_population, USE.NAMES = T, simplify = F)
 
 
-
+likeliest.scenario <- data.frame(
+   Population = names(gofs),
+   Scenario = as.character(sapply(
+     gofs, 
+     function(x){ 
+       names(which.max(x$posterior.probs)) 
+     }, 
+     USE.NAMES = T, 
+     simplify = F
+   ))
+)
+# a commenter !
+likeliest.scenario
 

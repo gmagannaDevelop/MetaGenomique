@@ -31,7 +31,7 @@ parallel.cv.modsel <-
   parallel_cv4postpr(
     models.expeA, sumstats.expeA, 
     nval=nval, 
-    tols=seq(0.005, 0.95, length.out = 60),
+    tols=seq(tol.low, tol.high, length.out = n.tols),
     nthreads=threads
   )
 

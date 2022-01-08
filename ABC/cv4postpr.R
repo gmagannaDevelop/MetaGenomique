@@ -40,7 +40,6 @@ parallel_cv4postpr <-
   cl <- makeCluster(.ncores)
   registerDoParallel(cl)
   set.seed(seed)
-  tol.iter <- iterators::iter(tols)
 tryCatch(
 {
   allprobs <- foreach(
@@ -100,13 +99,3 @@ tryCatch(
   class(cv4postpr.out) <- "cv4postpr.parallel"
   return(invisible(cv4postpr.out))
 }
-
-#  ind.fold <- sample(1:k_folds, nrow(df), replace=T)
-#  
-#  .splits <- list()
-#  for (i in 1:k_folds){
-#    .splits[[i]] <- list(
-#      train = df[ind.fold != i, ],
-#      test = df[ind.fold == i, ]
-#    )
-#  }
