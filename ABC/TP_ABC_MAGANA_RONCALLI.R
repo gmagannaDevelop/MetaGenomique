@@ -274,45 +274,21 @@ sumstats.bott.tb$Ne <- params.bott$Ne
   cat(dim(res$unadj.values), "\n")
   cat(head(res$unadj.values), "\n")
   cat(summary(res$pi), "\n")
+  plot_abc_distributions(res, params.bott, "Ne")
 }
 
-join_abc_distributions <- function(res.abc, params.df, col.name){
-  #' Generate a data frame with three columns :
-  #' * One for the prior 
-  #' * One for the naive posterior
-  #' * One fot the corrected posterior 
-  data.frame(
-    Prior = params.df[, col.name],
-    Posterior = res.abc$unadj.values[, col.name],
-    Posterior.corr = res.abc$adj.values[, col.name]
-  )
-}
-
-plot_abc_distributions <- function(res.abc, params.df, col.name){
-  #' Plot prior, posterior and corrected posterior
-  .dist.plot <- join_abc_distributions(res, params.bott, col.name) %>% 
-    reshape2::melt() %>% 
-    tibble %>% 
-    select(Loi = variable, everything()) %>% 
-    ggplot(aes(x=value, colour=Loi)) + 
-    geom_density() + labs(title = glue::glue("Lois pour '{col.name}'"), x=col.name)
-  .dist.plot
-}
-  
-join_abc_distributions(res, params.bott, "a") %>% 
-  reshape2::melt() %>% 
-  ggplot(aes(x=value, colour=variable)) + 
-  geom_density() + labs("a")
 
 
 
-cv=cv4abc(param = params.bott,
-          sumstat = sumstats.bott,
-          nval=10,tol=0.05,
-          method="rejection",
-          abc.out = NULL)
+cv <- cv4abc(
+  param = params.bott, sumstat = sumstats.bott,
+  nval=10, tol=c(0.05, 0.1), method="loclinear", abc.out = NULL
+)
 
-summary(cv)
+cv2 <- parallel_cv4abc(param = params.bott, sumstat = sumstats.bott,
+                nval=10, tols = c(0.05, 0.1),
+                method = "loclinear", abc.out = NULL, nthreads = 12)
+
 
 
 
