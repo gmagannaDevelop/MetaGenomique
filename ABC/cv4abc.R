@@ -116,7 +116,7 @@ tryCatch(
     mytol=tols, .inorder = T, .packages = c("abc"), .combine = c, .init = list()
   ) %dorng% {
     res <- matrix(ncol = np, nrow = nval)
-    for (i in seq_along(nval)) {
+    for (i in seq_along(cvsamp)) {
       mysamp <- cvsamp[i]
       mytrue <- param[mysamp, ]
       mytarget <- sumstat[mysamp, ]
@@ -133,8 +133,10 @@ tryCatch(
       
       if (statistic == "mean") 
         estim <- invisible(summary(subres, print = F)[4, ])
+      
       if (statistic == "mode") 
         estim <- invisible(summary(subres, print = F)[5, ])
+      
       res[i, ] <- estim
     }
     if (np == 1) 
