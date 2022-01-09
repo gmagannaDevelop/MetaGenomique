@@ -1,10 +1,20 @@
+#' Université Paris-Saclay
+#' Faculté des Sciences d'Orsay
+#' M2 AMI2B : Biologie Computationnelle
+#' 
+#' Métagénomique et génétique des populations
+#' 
+#' Gustavo Magaña López
+#' Theó Roncalli
+#' 
 
+# Load libraries
 shhh <- suppressPackageStartupMessages # It's a library, so shhh!
-
 shhh(library(here))
 shhh(library(glue))
 shhh(library(ggplot2))
 
+# Source our functions
 source(here("ABC/cv4postpr.R"))
 source(here("ABC/customfuncs.R"))
 
@@ -24,9 +34,11 @@ if (length(args) != 5){
     stop("You have more threads than tolerances to simulate!")
   }
 }
-# load simulation data
+
+# load simulated data
 loaded <- load(file = here("ABC/simu.expeA.RData"))
 
+# Perform parallel cross validation
 parallel.cv.modsel <-
   parallel_cv4postpr(
     models.expeA, sumstats.expeA, 
@@ -35,8 +47,10 @@ parallel.cv.modsel <-
     nthreads=threads
   )
 
+# Compute misclassification percentages
 rej.f.tol <- compute_misclassif_from_cv_model(parallel.cv.modsel)  
 
+# Automatically save results to the data directory 
 write.csv(
   rej.f.tol, 
   file=here(

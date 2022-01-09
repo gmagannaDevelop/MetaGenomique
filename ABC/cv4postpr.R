@@ -1,3 +1,12 @@
+#' Université Paris-Saclay
+#' Faculté des Sciences d'Orsay
+#' M2 AMI2B : Biologie Computationnelle
+#' 
+#' Métagénomique et génétique des populations
+#' 
+#' Gustavo Magaña López
+#' Theó Roncalli
+#' 
 
 shhh <- suppressPackageStartupMessages # It's a library, so shhh!
 

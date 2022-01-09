@@ -10,63 +10,73 @@
 #'
 
 #### Loading dependencies ####
+{
+  # declare dependencies
+  .dependencies <- 
+    c("here", "abc", "coala", "reshape2",
+      "magrittr", "ggplot2", "dplyr",
+      "tibble", "foreach", "doRNG", "stringr",
+      "RColorBrewer", "gridExtra"
+      )
+  # Check if some are not installed
+  new.packages <- 
+    .dependencies[!(.dependencies %in% installed.packages()[,"Package"])]
+  # Install missing packages
+  if(length(new.packages)) install.packages(new.packages)
+  # Silently load all the dependencies
+  .. <- sapply(.dependencies, function(x){ library(x, character.only = T)})
+  
+  # load utility functions
+  source(here("ABC/Fonctions_TP_demo_real.R")) # this script has slighly changed since TP1
+  source(here("ABC/customfuncs.R")) # To compute tables, error metrics, etc
+  # TODO : merge cv4postpr and cv4abc into a single parallel_abc file 
+  source(here("ABC/cv4postpr.R")) # To access parallel implementations of the functions
+}
 
-rm(list=objects())
-graphics.off()
-
-#+ echo=F, message=F, warning=F
-# declare dependencies
-.dependencies <- 
-  c("here", "abc", "coala", 
-    "magrittr", "ggplot2", "dplyr",
-    "tibble", "foreach", "doRNG", "stringr",
-    "RColorBrewer", "gridExtra"
-    )
-new.packages <- 
-  .dependencies[!(.dependencies %in% installed.packages()[,"Package"])]
-
-if(length(new.packages)) install.packages(new.packages)
-.. <- sapply(.dependencies, function(x){ library(x, character.only = T)})
-# load utility functions
-source(here("ABC/Fonctions_TP_demo_real.R")) # this script has slighly changed since TP1
 # load data
-hap.fname <- here("ABC/chr22.CG_54genomes_shapeit_phased.txt.haps")
-info.fname <- here("ABC/CG_54genomes_indiv.txt")
-realdata <- read.hap.geno(hap.input=hap.fname, info.input = info.fname)
+{
+  hap.fname <- here("ABC/chr22.CG_54genomes_shapeit_phased.txt.haps")
+  info.fname <- here("ABC/CG_54genomes_indiv.txt")
+  realdata <- read.hap.geno(hap.input=hap.fname, info.input = info.fname)
+}
 set.seed(1234)
 
-source(here("ABC/customfuncs.R"))
-source(here("ABC/cv4postpr.R"))
 
-# sumstats
-stat.1000g.df <- NULL
-for (pop in unique(realdata$info$POP)) {
-  # subset the dataset
-  pop.subset <- select.label(realdata, label = pop)
-  # compute estimates
-  size.norm.factor <- pop.subset$region_bp_lim[2] - pop.subset$region_bp_lim[1]
-  theta_watterson <- calculate.thetaW(pop.subset$segsites) / size.norm.factor
-  theta_tajima <- calculate.thetaPi(pop.subset$segsites) / size.norm.factor
-  tajimas_d <- calculate.Dt(pop.subset$segsites)
-  tajimas_d_var <- calculate.Dt.var(pop.subset$segsites)
-  # create the dataframe
-  .pop.stats <- 
-    data.frame(
-      Theta.Tajima=theta_tajima, D.Tajima=tajimas_d, 
-      Var.D.Tajima=tajimas_d_var,
-      Theta.Watterson=theta_watterson
-    )
-  stat.1000g.df <- rbind(stat.1000g.df, .pop.stats)
+#' 2.2 Calcul de statistiques résumées par population.
+{
+  stat.1000g.df <- NULL
+  for (pop in unique(realdata$info$POP)) {
+    # subset the dataset
+    pop.subset <- select.label(realdata, label = pop)
+    # compute estimates
+    size.norm.factor <- pop.subset$region_bp_lim[2] - pop.subset$region_bp_lim[1]
+    theta_watterson <- calculate.thetaW(pop.subset$segsites) / size.norm.factor
+    theta_tajima <- calculate.thetaPi(pop.subset$segsites) / size.norm.factor
+    tajimas_d <- calculate.Dt(pop.subset$segsites)
+    tajimas_d_var <- calculate.Dt.var(pop.subset$segsites)
+    # create the dataframe
+    .pop.stats <- 
+      data.frame(
+        Theta.Tajima=theta_tajima, D.Tajima=tajimas_d, 
+        Var.D.Tajima=tajimas_d_var,
+        Theta.Watterson=theta_watterson
+      )
+    stat.1000g.df <- rbind(stat.1000g.df, .pop.stats)
+ }
+  rownames(stat.1000g.df) <- unique(realdata$info$POP)
+  # We realised that simulated data only has three statistics :
+  # (Pi, D Tajima et Var(D Tajima)), so we take the subset
+  stat.1000g <- stat.1000g.df[, 1:3]
+  colnames(stat.1000g) <- c("pi", "tajimas_d", "tajimas_d_var")
+  # the tibble facilitates using tidyverse's tools
+  stat.1001g.tb <- stat.1000g %>% rownames_to_column("Population") %>% tibble()
 }
-rownames(stat.1000g.df) <- unique(realdata$info$POP)
-stat.1000g <- stat.1000g.df[, 1:3]
-colnames(stat.1000g) <- c("pi", "tajimas_d", "tajimas_d_var")
-stat.1001g.tb <- stat.1000g %>% rownames_to_column("Population") %>% tibble()
 
+#' Simulated data
 loaded <- load(file = here("ABC/simu.expeA.RData"))
 loaded
 # [1] "sumstats.expeA" "models.expeA"   "params.bott"
-# sapply(loaded, function(x){ str(eval(as.symbol(x))) }, simplify = T)
+# Three objects were imported from the file
 
 #' Data analysis
 dim(sumstats.expeA)
@@ -77,7 +87,7 @@ dim(params.bott)
 head(params.bott)
 
 # Visualise model parameters
-
+{
 aggregated.expeA <- cbind(sumstats.expeA, models.expeA)
 colnames(aggregated.expeA) <- c("Theta.Tajima", "D.Tajima", "Var.D.Tajima", "Type")
 
@@ -120,12 +130,13 @@ paste(here("ABC/Figures"), "Aggregated_boxplot_tajima.png", sep="/") %>%
   ggsave(plot = aggregated_boxplot_tajima, width = 6, height = 5)
 
 rm(boxplot.theta_tajima, boxplot.d_tajima, boxplot.var_d_tajima, aggregated_boxplot_tajima)
+}
+
 
 # Explore main ABC function
 ?postpr
 
-
-# Explore
+# Explore how the functions should be used, as well as its outputs.
 {
   random_idx <- 
     sample.int(length(models.expeA), size = 1)
@@ -136,114 +147,52 @@ rm(boxplot.theta_tajima, boxplot.d_tajima, boxplot.var_d_tajima, aggregated_boxp
     index = models.expeA[-random_idx],      # known models for reference db
     sumstat = sumstats.expeA[-random_idx,], # sumstats for reference db
     method = 'rejection',                   # type of ABC algorithm
-    tol=0.05                                #
+    tol=0.05                                # percentage of kept simulations
   )
   prob <- summary(abc.mod.sel)$Prob
   prob
 }
 
-# Gridsearch
-  random_idx <- 
-    sample.int(length(models.expeA), size = 1)
-  random_idx
+#' 3.3 Sélection de modèle démographique, évaluation des performances
+#' This shoult be performed using the script we developped for this purpose
+#' From the repo's root, you should be able to run it as follows :
+#' `Rscript ABC/parallel_cv4postpr.R 150 0.005 0.1 20 14`
+#' (if called with no arguments it will automatically print a help message)
+
+#' If you really want to run it on your R session, the function should
+#' already be loaded into the global namespace, you can call it as follows :
+#' 
+# parallel.cv.modsel.reject <- 
+#   parallel_cv4postpr(
+#     models.expeA, sumstats.expeA, nval=5, tols=seq(0.005, 0.95, length.out = 20)
+#   )
+
+#' Gridsearch
+{
+  # Load data from parallel_cv4postpr.R runs
+  general <- my.read.table(here("ABC/data/cv4postpr_nval_150_tols_0.005_0.95_50.csv"))
+  specific <- my.read.table(here("ABC/data/cv4postpr_nval_150_tols_0.005_0.1_50.csv"))
   
-  abc.mod.sel <- postpr(
-    target = sumstats.expeA[random_idx,],   # pseudo-observed sumstats
-    index = models.expeA[-random_idx],      # known models for reference db
-    sumstat = sumstats.expeA[-random_idx,], # sumstats for reference db
-    method = 'rejection',                   # type of ABC algorithm
-    tol=0.05                                #
-  )
-  prob <- summary(abc.mod.sel)$Prob
-  prob
-  
-
-cv4postpr(
-  index = models.expeA, 
-  sumstat = sumstats.expeA, 
-  nval=10, 
-  tols=c(.0005,.1,.5), 
-  method="rejection"
-) -> cv.modsel.reject
-
-parallel.cv.modsel.reject <- 
-  parallel_cv4postpr(
-    models.expeA, sumstats.expeA, nval=5, tols=seq(0.005, 0.95, length.out = 20)
-  )
-
-cv.modsel.reject <- parallel.cv.modsel.reject
-misclassif.reject <- list()
-for (tol in names(cv.modsel.reject$estim)) {
-  misclassif.reject[[tol]] = mean(cv.modsel.reject$estim[[tol]] != cv.modsel.reject$true)
-}
-.tols <- as.numeric(str_remove(names(misclassif.reject), "tol"))
-data.frame(tolerance=.tols, perc.misclassified=as.numeric(misclassif.reject))
-
-
-parallel.cv.modsel.reject2 <- 
-  parallel_cv4postpr(
-    models.expeA, sumstats.expeA, nval=20, 
-    tols=seq(0.005, 0.95, length.out = 30),
-    seed = 444
-  )
-
-parallel.cv.modsel.reject3 <- 
-  parallel_cv4postpr(
-    models.expeA, sumstats.expeA, nval=25, tols=seq(0.005, 0.95, length.out = 60)
-  )
-
-# plot(cv.modsel) # matrice de confusion pour chaque seuil de toleranc
-
-
-compute_misclassif_from_cv_model(cv.modsel.reject)  
-rej <- compute_misclassif_from_cv_model(parallel.cv.modsel.reject)  
-rej2 <- compute_misclassif_from_cv_model(parallel.cv.modsel.reject2)  
-rej3 <- compute_misclassif_from_cv_model(parallel.cv.modsel.reject3)  
-rej.full <- compute_misclassif_from_cv_model(parallel.cv.modsel.reject.full)  
-
-rej %>% ggplot(aes(x=tolerance, y=perc.misclassified)) + geom_point() + geom_smooth()
-
-estimCEU <- stat.1000g[population, 1:3]
-
-gof_for_population <- function (population){
-  #' Calculate Goodness-of-fit for a given population
-  #' This function is partially hardcoded and therefore unreliable
-  #' Proceed with caution
-  
-  # We added a statistic which is not 
-  # present in sumstats, that's why we have to take 
-  # only the first three columns
-  estim_x <- stat.1000g[population, ] %>% as.matrix 
-  
-  modsel_x <- postpr(target = estim_x, # pseudo-observed sumstats
-                      index = models.expeA, # known models for reference db
-                      sumstat = sumstats.expeA, # sumstats for reference db
-                      method='rejection', # type of ABC algorithm
-                      tol=0.05) # proportion of kept simulations
-  
-  prob_x <- summary(modsel_x)$Prob
-  gof_x <- gfitpca(target = estim_x, # pseudo-observed sumstats
-                    index = models.expeA, # known models for reference db
-                    sumstat = sumstats.expeA, # sumstats for reference db
-                    main = glue::glue("ABC - goodness of fit - Pop : {population} "))
-  
-  list(
-    postpr.summary = summary(modsel_x),
-    posterior.probs = prob_x,
-    gfitpca = gof_x
-  )
+  # Visualise the results
+  general.plot <- plot_cv_rej(general) + geom_smooth(method="lm")
+  specific.plot <- plot_cv_rej(specific) + geom_smooth()
 }
 
-pop.names <- as.list(rownames(stat.1000g)) 
-names(pop.names) <- pop.names
-gofs <- 
-  sapply(pop.names, gof_for_population, USE.NAMES = T, simplify = F)
-
+#' Calculate goodnes-of-fit
+{
+  estimCEU <- stat.1000g[population, ]
+  pop.names <- as.list(rownames(stat.1000g)) 
+  names(pop.names) <- pop.names
+  gofs <- 
+    sapply(pop.names, gof_for_population, USE.NAMES = T, simplify = F)
+}
 
 likeliest.scenario <- data.frame(
    Population = names(gofs),
-   Scenario = as.character(sapply(
-     gofs, 
+   P.bott = as.numeric(sapply(gofs, function(x){ as.numeric(x$posterior.probs['bott']) })),
+   P.const = as.numeric(sapply(gofs, function(x){ as.numeric(x$posterior.probs['const']) })),
+   P.exp = as.numeric(sapply(gofs, function(x){ as.numeric(x$posterior.probs['exp']) })),
+   Scenario = as.character(sapply(gofs, 
      function(x){ 
        names(which.max(x$posterior.probs)) 
      }, 
@@ -251,6 +200,120 @@ likeliest.scenario <- data.frame(
      simplify = F
    ))
 )
-# a commenter !
 likeliest.scenario
+
+
+#' # 4. Estimer les paramètres d’un modèle donné
+sumstats.bott <- subset(sumstats.expeA, subset=models.expeA=="bott")
+colnames(params.bott)
+params.bott.tb <- tibble(params.bott)
+
+
+{
+par(mfrow=c(2,2))
+hist(params.bott$Ne)
+hist(params.bott$a)
+hist(params.bott$duration)
+hist(params.bott$start)
+par(mfrow=c(1,1))
+}
+
+
+suppressMessages({
+  .ne.hist <- params.bott.tb %>% ggplot(aes(x=Ne)) + geom_histogram(colour="black", fill="white")
+  .a.hist <- params.bott.tb %>% ggplot(aes(x=a)) + geom_histogram(colour="black", fill="white")
+  .dur.hist <- params.bott.tb %>% ggplot(aes(x=duration)) + geom_histogram(colour="black", fill="white")
+  .star.hist <- params.bott.tb %>% ggplot(aes(x=start)) + geom_histogram(colour="black", fill="white")
+  .param.hists <- grid.arrange(
+    .ne.hist, .a.hist, .dur.hist, .star.hist, 
+    nrow=2, ncol=2,
+    top=textGrob("Distribution empirique des paramètres")
+  )
+  .param.hists
+})
+
+{
+sumstats.bott.tb <- tibble(sumstats.bott) %>% 
+  select(
+    `Theta Tajima (pi)` = pi,
+    `D Tajima` = tajimas_d,
+    `Var(D Tajima)` = tajimas_d_var
+  )
+sumstats.bott.tb$Ne <- params.bott$Ne
+
+  .pi.plot <- sumstats.bott.tb %>% 
+    ggplot(aes(x=Ne, y=`Theta Tajima (pi)`)) + geom_point(alpha=0.03) + geom_smooth(alpha=0.5)
+  .d.plot <- sumstats.bott.tb %>% 
+    ggplot(aes(x=Ne, y=`D Tajima`)) + geom_point(alpha=0.03) + geom_smooth(alpha=0.5)
+  .var.d.plot <- sumstats.bott.tb %>% 
+    ggplot(aes(x=Ne, y=`Var(D Tajima)`)) + geom_point(alpha=0.03) + geom_smooth(alpha=0.5)
+  .param.trends <- grid.arrange(
+    .pi.plot, .d.plot, .var.d.plot, 
+    nrow=3, ncol=1,
+    top=textGrob("Statistiques ~ Ne")
+  )
+  .param.trends
+}
+# Tracez les statistiques résumées en fonction du paramètre de taille efficace Ne, 
+# commentez. Pourquoi ces statistiques résumées vous paraissent utiles pour 
+# réaliser l’étude ABC complète à savoir 
+# sélection de modèle + inférence de paramètres.
+
+
+#' # 4.2 Exemple d’inférence
+?abc
+{
+  random_idx <- sample.int(length(models.expeA[models.expeA=="bott"]), size = 1)
+  random_idx
+  res <- abc(target = sumstats.bott[random_idx,],
+             param = params.bott,   #### A confirmer
+             sumstat =sumstats.bott[-random_idx],
+             tol=0.05,
+             method = "loclinear")
+  
+  cat(dim(res$unadj.values), "\n")
+  cat(head(res$unadj.values), "\n")
+  cat(summary(res$pi), "\n")
+}
+
+join_abc_distributions <- function(res.abc, params.df, col.name){
+  #' Generate a data frame with three columns :
+  #' * One for the prior 
+  #' * One for the naive posterior
+  #' * One fot the corrected posterior 
+  data.frame(
+    Prior = params.df[, col.name],
+    Posterior = res.abc$unadj.values[, col.name],
+    Posterior.corr = res.abc$adj.values[, col.name]
+  )
+}
+
+plot_abc_distributions <- function(res.abc, params.df, col.name){
+  #' Plot prior, posterior and corrected posterior
+  .dist.plot <- join_abc_distributions(res, params.bott, col.name) %>% 
+    reshape2::melt() %>% 
+    tibble %>% 
+    select(Loi = variable, everything()) %>% 
+    ggplot(aes(x=value, colour=Loi)) + 
+    geom_density() + labs(title = glue::glue("Lois pour '{col.name}'"), x=col.name)
+  .dist.plot
+}
+  
+join_abc_distributions(res, params.bott, "a") %>% 
+  reshape2::melt() %>% 
+  ggplot(aes(x=value, colour=variable)) + 
+  geom_density() + labs("a")
+
+
+
+cv=cv4abc(param = params.bott,
+          sumstat = sumstats.bott,
+          nval=10,tol=0.05,
+          method="rejection",
+          abc.out = NULL)
+
+summary(cv)
+
+
+
 
