@@ -44,6 +44,7 @@ library(png)
 library(magrittr)
 library(magick)
 library(ggplot2)
+library(abc)
 
 source(here("ABC/customfuncs.R"))
 ```
@@ -475,31 +476,77 @@ $$
 
 Cette métrique est facilement utilisable pour comparer les performances de différents
 modèles. Elle a l'avantage de se trouver dans le même ordre de grandeur que la variable
-d'intérêt. Cependant, la question est : Que faire quand plusieurs paramètres 
-doivent être considérés ? Nous pourrions ne regarder qu'une parmi les quatre 
-valeurs de RMSE. Nous pourrions attribuer des poids à chaque variable
-pour faire une moyenne pondérée. Le choix de poids est crucial car il déterminera
-le classement de méthodes de correction et valeurs de tolérance, et donc tous
+d'intérêt. Cette métrique permet d'estimer l'écart en moyenne entre les
+estimations $\hat{y}_t$ et la valeur observée $y_t$ pour une variable $y$, mais que devons-nous faire quand plusieurs paramètres doivent être considérés ? 
+Par exemple, pour comparer $RMSE(N_e)$ et $RMSE(a)$
+nous avons besoin que les erreurs soient du même ordre de grandeur. 
+Pour ce faire, nous avons utilisé la fonction R `scale(x, center=F, scale=T)` 
+afin de réduire chacun des $RMSE_i$.
+
+Une option est de ne regarder qu'une parmi les quatre 
+valeurs de RMSE, mais ceci représenterait une perte d'information.
+Une solution considérant toutes les variables est de prendre la moyenne 
+de leurs erreurs. Cette moyenne peut être naïve ou pondérée. 
+En tout cas le choix de poids est crucial car il déterminera le classement de méthodes 
+de correction et valeurs de tolérance, et donc tous
 les résultats obtenus.
 
-La pondération peut être justifiée par :
+La pondération peut être justifiée par une hypothèse biologique ou bien par
+un critère numérique pertinent. Nous avons décidé de prendre l'écart type du
+vecteur d'erreur de chaque variable comme son poids. Si l'on fait une moyenne simple,
+on risque de ne pas représenter la sensibilité de chaque paramètre au seuil de 
+tolérance $\varepsilon$.
 
-  * Une hypothèse biologique
-  * Un critère numérique pertinent
+```{r rmse, out.width='95%', fig.align='center', fig.cap="A gauche : valeurs réduits pour chaque paramètre, à droite : moyenne pondérée", fig.pos="h"}
+rmse <- ggdraw() + draw_image(readPNG(here("ABC/Figures/rmses.png")))
+rmse
+```
 
-C'est
+Dans la **figure \@ref(fig:rmse)** nous observons à gauche que le paramètre le plus 
+sensible au changements de $\varepsilon$ est $N_e$ quand la méthode de correction 
+est `loclinear` alors que pour `ridge`, c'est $start$. A droite nous observons 
+que la méthode `ridge` se montre plus sensible au choix de tolérance et permet 
+d'obtenir globalement un RSME réduit plus faible que `loclinear`.
+Pour cette raison nous avons fixé nos paramètres à `method='ridge'` et `tol=0.025`.
 
-```{r rmse, out.width='95%', fig.align='center', fig.cap="rmses", fig.pos="h"}
-lois <- ggdraw() + draw_image(readPNG(here("ABC/Figures/rmses.png")))
-lois
+
+## Application aux données réelles et conclusion
+
+Maintenant que nous avons bien calibré les hyperparamètres par validation croisés 
+en prenant en compte la métrique que nous avons proposée (moyenne des valeurs 
+$RMSE_i$ pondérée par leurs écarts type), nous pouvons appliquer la méthode `abc`
+pour estimer les paramètres $\theta = (N_e, a, duration, start)$. 
+La **table \@ref(tab:ss)** montre aussi la valeur observée et 
+l'estimation par `abc` qui est très proche pour toutes les statistiques résumées.
+
+
+```{r realdata, out.width='95%', fig.align='center', fig.cap="Distributions des paramètres, pop. CHB", fig.pos="h"}
+chb.plot <- ggdraw() + draw_image(readPNG(here("ABC/Figures/chb.png")))
+chb.plot
+```
+
+Comme précédemment discuté pour l'exemple aléatoire, on voit que l'estimation
+de $N_e$ est très différente de son prior. La variance de sa loi corrigé (corrected
+posterior) en utilisant la penalité `ridge` ($\mathit{l}^2$-norm) est moins importante
+que celle de l'estimation par simple rejet. Or, cette fois les deux estimations 
+posterior pour $a$ ne contredissent pas le prior. Ceci nous mène à croire que 
+probablement l'observation prise au hasard pour produire les premières estimations
+de densité des lois des paramètre ne correspondait pas à une simulation du 
+scénario bottleneck. Nous ne pouvons faire cette inférence que pour des données
+de simulations bottleneck car nous n'avons que les statistiques résumées pour ce 
+scénario. Ceci est une amélioration à prendre en compte: ce serait intéressant 
+d'avoir des données pour d'autres scénarios et analyser
+si cette variable a une influence sur la valeur des hyperparamètres optimaux
+cherchés par validation croisée. D'autres statistiques (sans nécessairement être exhaustives)
+pourraient être utiles pour améliorer les performances du modèle.
+
+
+```{r ss}
+my.read.table(here("ABC/data/chb.csv")) %>% 
+  knitr::kable(caption="Statistiques Résumées pour la pop. CHB (bottleneck)")
 ```
 
 
-## Application aux données réelles
-
-
-
-what
 
 \newpage
 
@@ -510,9 +557,10 @@ what
 ### Repo github {-#smth} 
 
 L'intégralité du code utilisé pour cet analyse est disponible dans le lien
-suivant : [https://github.com/gmagannaDevelop/MetaGenomique/tree/ABC](https://github.com/gmagannaDevelop/MetaGenomique/tree/ABC)
-
-bPeaks 
+suivant : [https://github.com/gmagannaDevelop/MetaGenomique/tree/ABC](https://github.com/gmagannaDevelop/MetaGenomique/tree/ABC). 
+N'hésitez pas à utiliser et modifier les versions parallélisées des 
+fonctions [`cv4abc`](https://github.com/gmagannaDevelop/MetaGenomique/blob/ABC/ABC/cv4abc.R) 
+et [`cv4postpr`](https://github.com/gmagannaDevelop/MetaGenomique/blob/ABC/ABC/cv4postpr.R) !
 
 
 

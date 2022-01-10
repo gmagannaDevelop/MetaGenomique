@@ -349,12 +349,47 @@ names(pops.bott) <- pops.bott
 test1 <- sapply(
     pops.bott, 
     abc_with_distributions,
-    "Ne",
+    col.name="Ne",
     method="ridge",
     tol = 0.025,
     USE.NAMES = T, 
     simplify = F
 )
-  
 
+{
+the.params <- colnames(params.bott)
+names(the.params) <- the.params
+}
+
+real.abc <- sapply(the.params, function(x){
+  sapply(pops.bott, abc_with_distributions,
+  col.name=x, method="ridge", tol = 0.025,
+  USE.NAMES = T, simplify = F)
+  }, USE.NAMES = T, simplify = F
+)
+
+grid.arrange(real.abc$Ne$CEU, real.abc$a$CEU, real.abc$duration$CEU, real.abc$start$CEU, nrow=2, ncol=2)
+
+{
+resCHB <- abc(target = stat.1000g["CHB", ],
+              param = params.bott,  
+              sumstat =sumstats.bott,
+              tol=0.025,
+              method = "ridge")
+  
+chb.res <- list()
+chb.res[[1]] <- plot_abc_distributions(res.abc = resCHB, params.df = params.bott, col.name = "Ne")#abc_with_distributions("CHB", "Ne", tol = 0.025, method = "ridge")
+chb.res[[2]] <- plot_abc_distributions(res.abc = resCHB, params.df = params.bott, col.name = "a")#abc_with_distributions("CHB", "a", tol = 0.025, method = "ridge")
+chb.res[[3]] <- plot_abc_distributions(res.abc = resCHB, params.df = params.bott, col.name = "duration")#abc_with_distributions("CHB", "duration", tol = 0.025, method = "ridge")
+chb.res[[4]] <- plot_abc_distributions(res.abc = resCHB, params.df = params.bott, col.name = "start")#abc_with_distributions("CHB", "start", tol = 0.025, method = "ridge")
+plotCHB <- do.call(grid.arrange, chb.res)
+}
+
+{
+  .estim.ss <- resCHB$ss %>% apply(2, mean)
+  .obs.ss <- stat.1000g["CHB", ]
+  chb.df <- rbind(.estim.ss, .obs.ss)
+  rownames(chb.df) <- c("Estimate", "Observed")
+  chb.df %>% rownames_to_column("Type") %>% my.write.csv(filename = here("ABC/data/chb.csv"))
+}
 

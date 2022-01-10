@@ -111,10 +111,11 @@ abc_with_distributions <-
   plot_x <- 
     plot_abc_distributions(res.abc = abc_x, params.df = params.bott, col.name)
   
-  list(
-    abc.obj = abc_x,
-    plot = plot_x
-  )
+  #list(
+  #  abc.obj = abc_x,
+  #  plot = plot_x
+  #)
+  plot_x
 }
 
 
