@@ -1,0 +1,315 @@
+---
+title: "Inférence démographique - Approximate Bayesian Computation"
+author: 
+  - Gustavo Magaña López
+  - Théo Roncalli
+date: "20/12/2021"
+output:
+  bookdown::pdf_document2:
+    includes:  
+      in_header: float_adjustement.tex
+header-includes:
+    - \usepackage{fancyhdr}
+    - \addtolength{\headheight}{1.0cm} % make more space for the header
+    - \pagestyle{fancyplain} % use fancy for all pages except chapter start
+    - \rhead{\includegraphics[height=1.2cm]{/home/gml/Documents/Master/M2_AMI2B/MetaGenomique/rendu_tp2/logo.png}} % right logo
+    - \renewcommand{\headrulewidth}{0pt} % remove rule below header
+    - \usepackage{float}
+    - \floatplacement{figure}{H}
+
+bibliography: [packages.bib] #, articles.bib]
+nocite: '@*'
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = F, warning = F, message = F, fig.pos= "h", cache = T
+)
+.annotation.pkgs <- c(
+  "here", "abc", "coala", "magrittr", "stringr",
+   "dplyr", "tibble", "foreach", "doRNG", 
+   "ggplot2", "RColorBrewer", "gridExtra")
+
+knitr::write_bib(c(
+  .annotation.pkgs, 'knitr', 'rmarkdown', 
+  'gridExtra', 'grid', 'cowplot', 'magick'
+), file = 'packages.bib')
+
+library(here)
+library(grid)
+library(cowplot)
+library(gridExtra)
+library(png)
+library(magrittr)
+```
+
+
+# Introduction {#intro}
+
+Dans le cas présent, un jeu de données nous est fourni sur le chromosome 22 pour
+54 individus, c’est-à-dire pour 108 haploïdes. 
+Celui-ci provient du 
+[Panel Diversity de Complete Genomics](http://www.completegenomics.com/public-data/). 
+Nous avons deux fichiers : le premier renvoie diverses informations sur chaque 
+haploïde (numéro du chromosome, id du snp, position sur le chromosome de 
+référence, nucléotide de référence, variant, et le nucléotide effectivement 
+observé pour chaque haploïde. 
+Le second fichier renvoie des métadonnées sur chaque haploïde. 
+Nous avons l’identifiant de l’individu, le code renseignant sur la population
+à laquelle il appartient et sa région de provenance. 
+Parmi les populations recensées, nous en avons plusieurs, comme les 
+portoricains (PUR), les Utah d’ascendance européenne du nord et de 
+l’ouest (CEU), les Yoruba (YRI), les chinois Han (CHB), etc. 
+Les scientifiques considèrent les CEU comme Européens alors que ces 
+individus habitent aux Etats-Unis car il y a eu une migration des Européens 
+de l’Ouest vers les Amériques, ce qui implique un bottleneck. 
+Comme c’est une communauté très fermée, on le considère comme un 
+échantillon européen étant donné qu’il n’y a pas d’échange de matériel 
+génétique avec d’autres populations américaines.
+
+Afin de reconstruire les tailles de population et histoires démographiques pour l’espèce humaine, nous pouvons commencer par étudier certaines statistiques telles que le D de Tajima:
+
+$$
+D = \frac{\Theta_T - \Theta_W}{\sqrt{V(\Theta_T - \Theta_W)}}
+$$
+
+Figure 1 fournit le D de Tajima pour chaque population recensée. 
+Un D de Tajima positif signifie qu’il y a un excès d’allèles en fréquence 
+intermédiaire, alors qu’un D de Tajima négatif signifie qu’il y a 
+plutôt de nombreux singletons. 
+Dans le cas présent, on remarque que les populations africaines 
+(YRI, ASW, LWK, MKK) ont un D de Tajima négatif (très élevé en valeur absolue). 
+Nous pouvons donc supposer que ces populations africaines ont connu une expansion démographique.
+En revanche, les autres populations ont un D de Tajima positif, 
+ce qui laisse supposer qu’il y a eu un bottleneck pour celles-ci. 
+On peut donc supposer qu’il y a eu une migration de l’espèce Homo Sapiens hors 
+d’Afrique. 
+Cette observation déduite de nos résultats semble être confirmée par la théorie 
+"Origine africaine de l’Homme moderne". On appelle ce phénomène le 
+Out Of Africa (OOA) qui désigne une très petite partie de la population 
+africaine ayant migré vers les autres continents il y a environ 
+50000 à 60000 années.
+
+TODO : insert figure
+Figure 1 : D de Tajima
+
+
+# Sélection du modèle démographie {#sel_mod_demo}
+
+Au regard des D de Tajima différents que nous avons obtenu précédemment, les populations humaines que nous étudions ne semblent pas avoir les mêmes caractéristiques de diversité génétique. Par conséquent, nous allons estimer des modèles démographiques plus complexes pour élaborer des analyses plus approfondies.
+
+## Hypothèses {#hypo}
+
+D’après les statistiques obtenues précédemment, nous pouvons supposer que les
+populations humaines ont subies des processus démographiques différents. 
+Ces différences de processus démographiques seraient surtout importantes entre
+les populations africaines (YRI, ASW, LWK, MKK) et les autres populations. 
+Pour la suite du devoir, nous nous intéresserons à trois scénarios 
+démographiques pour chacune des populations étudiées :
+
+  * constant (pas de changement significatif de la taille de la population au cours du temps)
+  * bottleneck (population connaissant un déclin démographique important puis, après une période de plusieurs générations, une croissance démographique très importante ramenant soudainement l’effectif de la population à son état initial)
+  * expansion (population connaissant une forte croissance démographique à partir d’une certaine période)
+
+Figure 2 fournit une représentation graphique dans le temps de la taille d'une
+population et de ses coalescences pour chaque scénario démographique. 
+Pour simuler ces modèles, différents paramètres peuvent être utilisés, 
+tels que la taille effective de la population Ne ou le taux de mutation . 
+Ces valeurs sont souvent inconnues et nécessite toutefois des simulations.
+
+TODO : insert figure
+Figure 2 : Schématisation des modèles démographiques
+
+
+Notons que le spectre de fréquence allélique SFS fournit des informations 
+importantes sur les scénarios démographiques passés. Par exemple, la 
+proportion de fréquences alléliques dérivés pour des comptages élevés est 
+plus importante pour le scénario de population constante en comparaison 
+des deux autres scénarios. Observons également que Le D Tajima est une 
+statistique résumant la densité du SFS. 
+Le D Tajima espéré pour chaque modèle démographique est le suivant:
+
+  * $D_{Tajima} < 0$ : expansion car excès d’allèles en fréquence intermédiaire (Theta Tajima supérieur au Theta Watterson)
+  * $D_{Tajima} = 0$ : constant (population à l’équilibre neutre sous le modèle de Wright-Fisher)
+  * $D_{Tajima} > 0$ : bottleneck car pauvreté d’allèles en fréquence intermédiaire (Theta Tajima inférieur au Theta Watterson)
+
+3.2 Construire une base de simulation de référence
+
+Pour retracer l’histoire démographique humaine, le modèle ABC peut être utilisé.
+Différentes statistiques résumées peuvent être utilisées : comptage des allèles,
+diversité génétique, spectre des fréquences alléliques, etc. 
+Ces statistiques résumées peuvent être simulées à partir de différents 
+paramètres tels que qu'énoncé précédemment (comme par exemple le taux de mutation).
+La distribution à priori de chacun de ces paramètres suivent une loi uniforme. 
+Nous pouvons proposer des bornes faibles afin d’être parcimonieux dans nos résultats.
+Si nous fixons un taux de tolérance trop élevé, nos trois modèles vont tendre 
+vers l’équiprobabilité. En revanche, il ne faut pas fixer un taux de tolérance
+trop faible non plus, afin d’éviter d’augmenter la variance de nos résultats qui
+seraient trop dépendantes d’une très faible quantité de simulations conservées. 
+Un taux de tolérance de $5\%$ semble donc intéressant et raisonnable.
+
+Dans le cas présent, un jeu de statistiques résumées déjà simulées pour 50000 
+valeurs différentes de paramètres pour les trois scénarios démographiques est 
+déjà proposé. Les statistiques résumées simulées sont le Theta Tajima, 
+le D Tajima et la variance du D Tajima. 
+Nous rappelons que le D Tajima est une statistique résumée du SFS et permet 
+donc de retracer l’évolution démographique d’une population.
+TODO : reference figure
+Figure 3 fournit les boxplot de ces trois statistiques résumées pour les trois
+scénarios démographiques étudiés : population constante, goulot d’étranglement
+et expansion démographique. On remarque que la médiane du D Tajima est positif
+en cas de bottleneck, nul pour une population constante et fortement négative
+pour une population en expansion. Ces résultats sont en cohérence avec 
+la théorie établie. Également, on remarque que la variance du D Tajima est 
+plus élevée en cas de bottleneck et plus faible en cas de population constante
+et en expansion.
+
+TODO : insert figure
+Figure 3 : Statistiques résumées simulées pour chaque scénario démographique
+
+Nous allons maintenant nous intéresser à la sélection de modèle démographique 
+avec la méthode Approximate Bayesian Computation (ABC) en récupérant les 
+probabilités bayésiennes a posteriori pour chacun des scénarios. 
+Pour commencer, nous pouvons récupérer une unique simulation et ses statistiques
+résumées. Par exemple, prenons la première simulation associée à un goulot
+d’étranglement. 
+Pour cette simulation, nous avons $\Theta_{Tajima} = 0.001053111$, 
+$D_{Tajima} = 0.05764936$ et sa variance  $Var(D_{Tajima}) = 1.302449.$
+Si nous appliquons la méthode ABC avec un seuil de tolérance fixé à $5\%$, 
+nous obtenons les probabilités a posteriori suivantes : $13.20\%$ pour une 
+population constante, $1.33\%$ pour un goulot d’étranglement et $86.67\%$ pour
+une population en expansion. En revanche, si nous avons un seuil de tolérance 
+égal à $100%$, nous obtenons des probabilités a posteriori équiprobable, 
+c'est-à-dire à $33.3\%$ chacun. Cela résulte du fait que nous conservons 
+toutes les simulations lorsque le seuil de tolérance est à $100\%$ et il 
+n’est donc pas possible de prédire le scénario démographique auquel elle appartient.
+En revanche, lorsque nous fixons un seuil de tolérance à $5\%$, nous prenons
+uniquement les $5\%$ de simulations les plus proches de l'observation et nous
+utilisons les proportions de chaque scénario simulé récupéré pour estimer la
+probabilité bayésienne a posteriori. Ajoutons que nous avons retiré 
+l’observation pour estimer son postérieur. Nous faisons cela afin d’avoir une
+estimation out-of-sample, et donc corriger le biais de l’erreur d’apprentissage.
+
+Nous avons 3 modèles démographiques. Nous définissons le taux de mal classés comme suit:
+
+
+
+$$
+M = \frac{1}{n} \sum\limits_{i=1}^{n} \mathbf{1}\lbrace y_{i} \neq \hat{y} (x_{i}) \rbrace
+$$
+
+
+
+
+Si l’on prédisait un modèle au hasard, le taux de mauvaise classification serait
+de deux tiers. Avec le modèle computationnel ABC, nous estimons le scénario
+démographique en fonction des autres observations. 
+Toutefois, deux hyperparamètres sont requis pour notre modèle ABC :
+
+  * Seuil de tolérance $\varepsilon$
+  * Méthode utilisée $\alpha$
+
+Un hyperparamètre est un paramètre sélectionné par l’utilisateur, en amont de
+l’exécution du modèle. Lorsqu’un modèle est nouveau, la sélection de 
+l’hyperparamètre est arbitraire. Néanmoins, dans le cas de prédiction ou
+classification, il est important de procéder à des tests computationnels pour
+sélectionner une valeur pour l’hyperparamètre. Dans notre cas par exemple, 
+nous avons un problème de classification à trois modalités. Notre objectif est
+d’utiliser un modèle qui prédit un scénario démographique en minimisant le taux
+d’erreur. Pour évaluer la qualité de prédiction associée à un hyperparamètre,
+différentes méthodes sont possibles. Dans le cas présent, nous allons utiliser
+une méthode de cross-validation pour sélectionner la valeur des hyperparamètres.
+La validation croisée consiste à diviser les données en deux sous 
+jeux de données : le premier est appelé jeu de données d’apprentissage 
+(servant à calculer les estimateurs pour la prédiction du modèle) et le second
+est appelé jeu de données test (servant à calculer l’erreur de prédiction). 
+Ainsi, nous chercherons à minimiser l’erreur test comme suit :
+
+$$
+\lbrace\hat{\varepsilon}, \hat{\alpha} \rbrace = \arg \min \frac{1}{n} \sum\limits_{i=1}^{n} \mathbf{1}\lbrace y_{i} \neq \hat{y}^{-i} (x_{i}) \rbrace 
+$$
+
+
+Pour rechercher la valeur de nos deux hyperparamètres (seuil de tolérance 
+$\varepsilon$ et méthode utilisée $\alpha$), nous utiliserons une méthode basée sur le
+_leave-one-out cross validation_. Cette dernière consiste à considérer, 
+pour une observation donnée, un échantillon d’apprentissage composé de 
+toutes les observations sauf celle donnée, et d’un échantillon test composé
+de cette unique observation, puis de calculer le modèle sur l’échantillon
+d’apprentissage et la prédiction sur l’observation donnée.
+Cette opération est réitérée sur l’ensemble des observations disponibles 
+afin que nous puissions calculer le taux de mal classés.
+
+Dans le présent travail, une fonction nous a été fournie pour effectuer le
+leave-one-out cross validation. Comme le modèle ABC est consommateur en temps,
+l’énoncé nous indique d’utiliser directement la méthode de base, i.e. rejet.
+En revanche, nous allons évaluer le taux de mal classés en fonction du seuil
+de tolérance epsilon. Le leave-one-out cross validation est une opération 
+coûteuse en temps. Afin de pallier ce problème, nous avons parallélisé 
+la méthode de cross validation. 
+Nous avons donc lancé le (pseudo) leave-one-out cross-validation sur 
+150 observations (50 pour chaque scénario) pour différents seuils de tolérance. 
+**TODO : reference figure 4**
+Figure 4 reporte le taux d’erreur test pour un seuil de tolérance epsilon allant 
+de $0.05\%$ à $10\%$. On remarque que le seuil de tolérance est croissant à 
+mesure que le seuil de tolérance augmente. 
+Le taux d’erreur tend vers deux tiers à mesure que nous approchons de un. 
+Il convient donc de fixer un seuil de tolérance faible pour minimiser le taux
+d’erreur. Toutefois, on remarque également du bruit pour des seuils de tolérance
+très faibles (entre $0.05\%$ et $2.5\%$). En effet, si notre modèle ne 
+prend qu'un très faible nombre de simulations proches de l’observation, 
+le poids d’une simulation est très important, ce qui augmente la variance de nos
+prédictions. Il convient donc de fixer un seuil de tolérance faible mais 
+suffisamment élevé également pour éviter de capturer du bruit. 
+Un seuil de tolérance fixé à $2.5\%$ semble raisonnable.
+
+**TODO : insert figure**
+**TODO : check if mathmode is allowed for figure captions**
+Figure 4 : Taux d’erreur test en leave-one-out cross-validation (epsilon allant de 0.05% à 10%)
+
+## Sélection du modèle démographique pour les données réelles {#real-modsel}
+
+Maintenant que nous avons déterminé la valeur de nos hyperparamètres grâce au
+cross-validation sur données simulées 
+(seuil de tolérance $\varepsilon = 2.5\%$ et méthode utilisée 
+$\alpha = \text{rejetction}$), 
+nous pouvons appliquer le modèle ABC sur nos données réelles. 
+TODO : reference table
+Table 1 fournit, pour chaque population, la probabilité bayésienne a posteriori
+de chaque scénario démographique et la prédiction du scénario. 
+Nous remarquons que pour quatre populations, le scénario d’expansion est prédit.
+Cela concerne les quatre populations africaines (YRI, ASW, LWK, MKK). Parmi les
+populations pour lesquelles le modèle ABC prédit un goulot d’étranglement,
+nous avons les résidents de l'Utah d'ascendance européenne du Nord et de l'Ouest
+(CEU), les chinois Han à Pékin (CHB), les japonais à Tokyo (JPT) et les Toscans
+en Italie (TSI). Pour toutes les autres populations, le modèle ABC prédit une
+démographique constante dans le temps. Pour certaines populations, le scénario
+démographique prédit est très vraisemblable. C’est le cas par exemple pour les
+Yoruba à Ibadan au Nigéria (YRI) pour lesquels nous estimons le scénario
+d’expansion à $93.3\%$ ou les individus d’ascendance africaine dans le sud-ouest
+des États-Unis (ASW) pour lesquels nous estimons le même scénario à $90.7\%$
+
+# Estimer les paramètres d'un modèle donné
+
+# Références et Annexe {-#refs}
+
+<div id="refs"></div>
+
+### something {-#smth} 
+
+bPeaks 
+
+\newpage
+
+```{r table1}
+#first.reg <- s.param.reg$coefficients
+#colnames(first.reg)[4] <- 'p value'
+#first.reg %>% 
+#  as.data.frame() %>% 
+#  dplyr::mutate_if(is.numeric, funs(as.character(signif(., 3)))) %>% 
+#  knitr::kable(caption="Estimation des coefficients pour prédire `before.ratio`")
+```
+
+
+
