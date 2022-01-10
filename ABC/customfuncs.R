@@ -52,6 +52,15 @@ my.read.table <- function(x){
   read.table(x, header = T, sep = ",")
 }
 
+my.write.csv <- function(df, filename){
+  write.csv(
+    df, 
+    file=filename, 
+    quote = F, 
+    row.names = F
+  )
+}
+
 plot_cv_rej <- function(rej.df){
   #' Scatterplot for cv4postpr
   #' Percentage misclassified ~ tolerance
@@ -61,14 +70,11 @@ plot_cv_rej <- function(rej.df){
   cv.plot
 }
 
-gof_for_population <- function (population, tol = 0.05){
+gof_for_population <- function (population, tol = 0.025){
   #' Calculate Goodness-of-fit for a given population
   #' This function is partially hardcoded and therefore unreliable
   #' Proceed with caution
   
-  # We added a statistic which is not 
-  # present in sumstats, that's why we have to take 
-  # only the first three columns
   estim_x <- stat.1000g[population, ] %>% as.matrix 
   
   modsel_x <- postpr(target = estim_x, # pseudo-observed sumstats
@@ -90,6 +96,29 @@ gof_for_population <- function (population, tol = 0.05){
   )
 }
 
+abc_with_distributions <- 
+  function (population, col.name, tol = 0.05, method = "rejection"){
+  #' hardcoded
+  
+  estim_x <- stat.1000g[population, ] %>% as.matrix 
+  
+  abc_x <- abc(target = estim_x,
+                 param = params.bott,   #### A confirmer
+                 sumstat = sumstats.bott,
+                 tol=tol,
+                 method = method)
+  
+  plot_x <- 
+    plot_abc_distributions(res.abc = abc_x, params.df = params.bott, col.name)
+  
+  list(
+    abc.obj = abc_x,
+    plot = plot_x
+  )
+}
+
+
+
 join_abc_distributions <- function(res.abc, params.df, col.name){
   #' Generate a data frame with three columns :
   #' * One for the prior 
@@ -104,11 +133,75 @@ join_abc_distributions <- function(res.abc, params.df, col.name){
 
 plot_abc_distributions <- function(res.abc, params.df, col.name){
   #' Plot prior, posterior and corrected posterior
-  .dist.plot <- join_abc_distributions(res, params.bott, col.name) %>% 
+  .dist.plot <- join_abc_distributions(res.abc, params.df, col.name) %>% 
     reshape2::melt() %>% 
-    tibble %>% 
-    select(Loi = variable, everything()) %>% 
-    ggplot(aes(x=value, colour=Loi)) + 
+    tibble::as_tibble() %>% 
+    dplyr::select(Loi = variable, everything()) %>% 
+    ggplot2::ggplot(aes(x=value, colour=Loi)) + 
     geom_density() + labs(title = glue::glue("Lois pour '{col.name}'"), x=col.name)
   .dist.plot
+}
+
+normalise_rmse <- function(rmse.df, .melt=T){
+  #' Normalise the RMSE so that all parameters
+  #' are on the same order of magnitude.
+  #' Basically a fancy wrapper for scale(center=F)
+  #' IMPORTANT :
+  #' Tolerance is assumed to be the first column
+  normalised.tb <- rmse.df[, 2:ncol(rmse.df)] %>% 
+    scale(center = F) %>% 
+    as.data.frame %>% 
+    tibble::as_tibble()
+  
+  normalised.tb %<>% 
+    dplyr::mutate(Tolerance = rmse.df[, 1]) %>% 
+    dplyr::select(Tolerance, dplyr::everything())
+  
+  if (.melt) {
+    normalised.tb %<>% 
+      reshape2::melt(
+        id.vars="Tolerance", 
+        variable.name = "Parameter",
+        value.name = "Scaled Error"
+      ) %>% 
+      tibble::as_tibble()
+  }
+  
+  normalised.tb
+}
+
+plot_abc_cv_rmse <- function(rmse.df){
+  #' Chain a call to normalise_rmse and 
+  #' some ggplot ;)
+  
+  .rmse <- normalise_rmse(rmse.df = rmse.df, .melt = T)
+  .cv.rmse.plot <- .rmse %>% 
+    ggplot(aes(x=Tolerance, y=`Scaled Error`)) + 
+    geom_point(aes(colour=Parameter))
+  .cv.rmse.plot
+}
+
+rmse_weighted_average <- function(rmse.df, .weights=NULL){
+  #' Compute a weighted average of parameters' RMSE
+  #' in order to obtain a sensible estimate of the global error
+  #' IMPORTANT :
+  #' Tolerance is assumed to be the first column
+  #' 
+  #' Weights can be optionally passed as a vector of the
+  #' same lenght as the number of sumstats
+  #' Otherwise their standard deviation is used 
+  #' w ~ sd(stat)
+  
+  if (is.null(.weights)) .w <- apply(rmse.df[, 2:ncol(rmse.df)], 2, sd)
+  else .w <- .weights
+    
+  data.frame(
+    Tolerance=rmse.df[, 1],
+    w.RMSE=apply(
+      rmse.df[, 2:ncol(rmse.df)], 
+      1, 
+      weighted.mean, 
+      w=.w
+    )
+  )
 }

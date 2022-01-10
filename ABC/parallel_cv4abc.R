@@ -22,7 +22,7 @@ source(here("ABC/customfuncs.R"))
 args <- commandArgs(trailingOnly=T)
 if (length(args) != 6){
   print("usage: ")
-  print("Rscript parallel_cv4postpr.R nval tol.low tol.high n.tols threads method")
+  print("Rscript parallel_cv4abc.R nval tol.low tol.high n.tols threads method")
   stop("Incorrect number of arguments")
 } else {
   nval <- as.numeric(args[1])

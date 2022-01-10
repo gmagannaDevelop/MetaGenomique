@@ -14,7 +14,7 @@
   # declare dependencies
   .dependencies <- 
     c("here", "abc", "coala", "reshape2",
-      "magrittr", "ggplot2", "dplyr",
+      "magrittr", "ggplot2", "dplyr", "grid",
       "tibble", "foreach", "doRNG", "stringr",
       "RColorBrewer", "gridExtra"
       )
@@ -134,7 +134,7 @@ rm(boxplot.theta_tajima, boxplot.d_tajima, boxplot.var_d_tajima, aggregated_boxp
 
 
 # Explore main ABC function
-?postpr
+#?postpr
 
 # Explore how the functions should be used, as well as its outputs.
 {
@@ -180,7 +180,7 @@ rm(boxplot.theta_tajima, boxplot.d_tajima, boxplot.var_d_tajima, aggregated_boxp
 
 #' Calculate goodnes-of-fit
 {
-  estimCEU <- stat.1000g[population, ]
+  #estimCEU <- stat.1000g[population, ]
   pop.names <- as.list(rownames(stat.1000g)) 
   names(pop.names) <- pop.names
   gofs <- 
@@ -207,16 +207,6 @@ likeliest.scenario
 sumstats.bott <- subset(sumstats.expeA, subset=models.expeA=="bott")
 colnames(params.bott)
 params.bott.tb <- tibble(params.bott)
-
-
-{
-par(mfrow=c(2,2))
-hist(params.bott$Ne)
-hist(params.bott$a)
-hist(params.bott$duration)
-hist(params.bott$start)
-par(mfrow=c(1,1))
-}
 
 
 suppressMessages({
@@ -259,9 +249,9 @@ sumstats.bott.tb$Ne <- params.bott$Ne
 # réaliser l’étude ABC complète à savoir 
 # sélection de modèle + inférence de paramètres.
 
-
+#' # 4.1 Exploration, intuitions
 #' # 4.2 Exemple d’inférence
-?abc
+# ?abc
 {
   random_idx <- sample.int(length(models.expeA[models.expeA=="bott"]), size = 1)
   random_idx
@@ -277,19 +267,89 @@ sumstats.bott.tb$Ne <- params.bott$Ne
   plot_abc_distributions(res, params.bott, "Ne")
 }
 
+#' This shoult be performed using the script we developped for this purpose
+#' From the repo's root, you should be able to run it as follows :
+#' `Rscript ABC/parallel_cv4abc.R 150 0.005 0.1 20 16 ridge` (takes about an hour)
+#' (if called with no arguments it will automatically print a help message)
+
+#' If you really want to run it on your R session, the function should
+#' already be loaded into the global namespace, you can call it as follows :
+#' 
+# # sequential, for exploration
+# cv <- cv4abc(
+#   param = params.bott, sumstat = sumstats.bott,
+#   nval=10, tol=c(0.05, 0.1), method="loclinear", abc.out = NULL
+# )
+# 
+# # the real thing ;)
+# cv2 <- parallel_cv4abc(param = params.bott, sumstat = sumstats.bott,
+#                 nval=10, tols = c(0.05, 0.1),
+#                 method = "loclinear", abc.out = NULL, nthreads = 12)
+
+# Gridsearch
+{
+  # Load data from parallel_cv4abc.R runs
+  cv.loclinear <- 
+    my.read.table(here("ABC/data/cv4abc_loclinear_nval_150_tols_0.005_0.3_20.csv"))
+  cv.ridge <- 
+    my.read.table(here("ABC/data/cv4abc_ridge_nval_150_tols_0.005_0.3_20.csv"))
+  
+  # Visualise the results
+  abc.loclinear.cv.plot <- plot_abc_cv_rmse(cv.loclinear) + labs(title="method = 'loclinear'")
+  abc.ridge.cv.plot <- plot_abc_cv_rmse(cv.ridge) + labs(title="method = 'ridge'")
+  grid.arrange(
+    abc.loclinear.cv.plot, abc.ridge.cv.plot, 
+    nrow=2, ncol=1,
+    top=textGrob("RMSE across parameters")
+  )
+}
+# how to account for different behaviours ? 
+# compute a weighted mean !
+
+{
+# caculated normalised RMSE (scale(center=F, scale=T))
+cv.loclinear.norm <- normalise_rmse(cv.loclinear, .melt = F)
+cv.ridge.norm <- normalise_rmse(cv.ridge, .melt = F)
+# compute weighted averages (using their standard deviation)
+cv.loclinear.w <- rmse_weighted_average(cv.loclinear.norm)
+cv.ridge.w <- rmse_weighted_average(cv.ridge.norm)
+# compare methods
+cv.methods <- data.frame(
+  tolerance=cv.loclinear.w$Tolerance,
+  loclinear=cv.loclinear.w$w.RMSE,
+  ridge=cv.ridge.w$w.RMSE
+) %>% 
+  reshape2::melt(
+    id.vars="tolerance", 
+    variable.name = "Method",
+    value.name = "RMSE"
+  )
+
+cv.methods %>% ggplot(aes(x=tolerance, y=RMSE)) + geom_point(aes(colour=Method))
+}
 
 
+#' # 4.4 Application aux données réelles
+#' 
+#' 
 
-cv <- cv4abc(
-  param = params.bott, sumstat = sumstats.bott,
-  nval=10, tol=c(0.05, 0.1), method="loclinear", abc.out = NULL
+# Select bottleneck populations
+{
+pops.bott <- 
+  likeliest.scenario[ likeliest.scenario$Scenario == "bott", "Population"]
+names(pops.bott) <- pops.bott
+}
+
+
+test1 <- sapply(
+    pops.bott, 
+    abc_with_distributions,
+    "Ne",
+    method="ridge",
+    tol = 0.025,
+    USE.NAMES = T, 
+    simplify = F
 )
-
-cv2 <- parallel_cv4abc(param = params.bott, sumstat = sumstats.bott,
-                nval=10, tols = c(0.05, 0.1),
-                method = "loclinear", abc.out = NULL, nthreads = 12)
-
-
-
+  
 
 
