@@ -201,13 +201,12 @@ likeliest.scenario <- data.frame(
    ))
 )
 likeliest.scenario
-
+my.write.csv(likeliest.scenario, filename = here("ABC/data/likeliest.csv"))
 
 #' # 4. Estimer les paramètres d’un modèle donné
 sumstats.bott <- subset(sumstats.expeA, subset=models.expeA=="bott")
 colnames(params.bott)
 params.bott.tb <- tibble(params.bott)
-
 
 suppressMessages({
   .ne.hist <- params.bott.tb %>% ggplot(aes(x=Ne)) + geom_histogram(colour="black", fill="white")
@@ -224,7 +223,7 @@ suppressMessages({
 
 {
 sumstats.bott.tb <- tibble(sumstats.bott) %>% 
-  select(
+  dplyr::select(
     `Theta Tajima (pi)` = pi,
     `D Tajima` = tajimas_d,
     `Var(D Tajima)` = tajimas_d_var
@@ -237,7 +236,7 @@ sumstats.bott.tb$Ne <- params.bott$Ne
     ggplot(aes(x=Ne, y=`D Tajima`)) + geom_point(alpha=0.03) + geom_smooth(alpha=0.5)
   .var.d.plot <- sumstats.bott.tb %>% 
     ggplot(aes(x=Ne, y=`Var(D Tajima)`)) + geom_point(alpha=0.03) + geom_smooth(alpha=0.5)
-  .param.trends <- grid.arrange(
+  .param.trends <- gridExtra::grid.arrange(
     .pi.plot, .d.plot, .var.d.plot, 
     nrow=3, ncol=1,
     top=textGrob("Statistiques ~ Ne")
@@ -256,7 +255,7 @@ sumstats.bott.tb$Ne <- params.bott$Ne
   random_idx <- sample.int(length(models.expeA[models.expeA=="bott"]), size = 1)
   random_idx
   res <- abc(target = sumstats.bott[random_idx,],
-             param = params.bott,   #### A confirmer
+             param = params.bott,  
              sumstat =sumstats.bott[-random_idx],
              tol=0.05,
              method = "loclinear")
@@ -286,6 +285,9 @@ sumstats.bott.tb$Ne <- params.bott$Ne
 #                 nval=10, tols = c(0.05, 0.1),
 #                 method = "loclinear", abc.out = NULL, nthreads = 12)
 
+global.abc <- my.read.table("ABC/data/cv4abc_loclinear_nval_150_tols_0.005_0.95_50.csv")
+glob.plot <- plot_abc_cv_rmse(global.abc) + labs(title = "Global exploration")
+
 # Gridsearch
 {
   # Load data from parallel_cv4abc.R runs
@@ -297,7 +299,7 @@ sumstats.bott.tb$Ne <- params.bott$Ne
   # Visualise the results
   abc.loclinear.cv.plot <- plot_abc_cv_rmse(cv.loclinear) + labs(title="method = 'loclinear'")
   abc.ridge.cv.plot <- plot_abc_cv_rmse(cv.ridge) + labs(title="method = 'ridge'")
-  grid.arrange(
+  narrow.abc <- grid.arrange(
     abc.loclinear.cv.plot, abc.ridge.cv.plot, 
     nrow=2, ncol=1,
     top=textGrob("RMSE across parameters")
@@ -322,10 +324,13 @@ cv.methods <- data.frame(
   reshape2::melt(
     id.vars="tolerance", 
     variable.name = "Method",
-    value.name = "RMSE"
+    value.name = "Scaled Error"
   )
 
-cv.methods %>% ggplot(aes(x=tolerance, y=RMSE)) + geom_point(aes(colour=Method))
+method.comparison <- cv.methods %>% 
+  ggplot(aes(x=tolerance, y=`Scaled Error`)) + 
+  geom_point(aes(colour=Method)) + 
+  labs(title="Weighted average of RMSE")
 }
 
 

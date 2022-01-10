@@ -42,6 +42,10 @@ library(cowplot)
 library(gridExtra)
 library(png)
 library(magrittr)
+library(magick)
+library(ggplot2)
+
+source(here("ABC/customfuncs.R"))
 ```
 
 
@@ -74,7 +78,7 @@ $$
 D = \frac{\Theta_T - \Theta_W}{\sqrt{V(\Theta_T - \Theta_W)}}
 $$
 
-Figure 1 fournit le D de Tajima pour chaque population recensée. 
+La **figure \@ref(fig:dtaj)** fournit le D de Tajima pour chaque population recensée. 
 Un D de Tajima positif signifie qu’il y a un excès d’allèles en fréquence 
 intermédiaire, alors qu’un D de Tajima négatif signifie qu’il y a 
 plutôt de nombreux singletons. 
@@ -91,9 +95,10 @@ Out Of Africa (OOA) qui désigne une très petite partie de la population
 africaine ayant migré vers les autres continents il y a environ 
 50000 à 60000 années.
 
-TODO : insert figure
-Figure 1 : D de Tajima
-
+```{r dtaj, fig.cap="D de Tajima pour chaque population", out.width='80%', fig.align='center'}
+snq1 <- ggdraw() + draw_image(readPNG(here("ABC/Figures/D_tajima.png")))
+print(snq1)
+```
 
 # Sélection du modèle démographie {#sel_mod_demo}
 
@@ -112,15 +117,17 @@ démographiques pour chacune des populations étudiées :
   * bottleneck (population connaissant un déclin démographique important puis, après une période de plusieurs générations, une croissance démographique très importante ramenant soudainement l’effectif de la population à son état initial)
   * expansion (population connaissant une forte croissance démographique à partir d’une certaine période)
 
-Figure 2 fournit une représentation graphique dans le temps de la taille d'une
-population et de ses coalescences pour chaque scénario démographique. 
+**Figure \@ref(fig:schemes)** fournit une représentation graphique dans le temps 
+de la taille d'une population et de ses coalescences pour chaque scénario
+démographique. 
 Pour simuler ces modèles, différents paramètres peuvent être utilisés, 
 tels que la taille effective de la population Ne ou le taux de mutation . 
 Ces valeurs sont souvent inconnues et nécessite toutefois des simulations.
 
-TODO : insert figure
-Figure 2 : Schématisation des modèles démographiques
-
+```{r schemes, fig.cap="Schématisation des modèles démographiques", out.width='80%', fig.align='center'}
+snq2 <- ggdraw() + draw_image(readPNG(here("ABC/Figures/schemes.png")))
+print(snq2)
+```
 
 Notons que le spectre de fréquence allélique SFS fournit des informations 
 importantes sur les scénarios démographiques passés. Par exemple, la 
@@ -155,9 +162,9 @@ déjà proposé. Les statistiques résumées simulées sont le Theta Tajima,
 le D Tajima et la variance du D Tajima. 
 Nous rappelons que le D Tajima est une statistique résumée du SFS et permet 
 donc de retracer l’évolution démographique d’une population.
-TODO : reference figure
-Figure 3 fournit les boxplot de ces trois statistiques résumées pour les trois
-scénarios démographiques étudiés : population constante, goulot d’étranglement
+**Figure \@ref(fig:tajs)** fournit les boxplot de ces trois statistiques résumées 
+pour les trois scénarios démographiques étudiés : 
+population constante, goulot d’étranglement
 et expansion démographique. On remarque que la médiane du D Tajima est positif
 en cas de bottleneck, nul pour une population constante et fortement négative
 pour une population en expansion. Ces résultats sont en cohérence avec 
@@ -165,8 +172,11 @@ la théorie établie. Également, on remarque que la variance du D Tajima est
 plus élevée en cas de bottleneck et plus faible en cas de population constante
 et en expansion.
 
-TODO : insert figure
-Figure 3 : Statistiques résumées simulées pour chaque scénario démographique
+```{r tajs, fig.cap="Statistiques résumées simulées pour chaque scénario démographique", out.width='80%', fig.align='center'}
+snq3 <- ggdraw() + 
+  draw_image(readPNG(here("ABC/Figures/Aggregated_boxplot_tajima.png")))
+print(snq3)
+```
 
 Nous allons maintenant nous intéresser à la sélection de modèle démographique 
 avec la méthode Approximate Bayesian Computation (ABC) en récupérant les 
@@ -196,7 +206,7 @@ Nous avons 3 modèles démographiques. Nous définissons le taux de mal classés
 
 
 $$
-M = \frac{1}{n} \sum\limits_{i=1}^{n} \mathbf{1}\lbrace y_{i} \neq \hat{y} (x_{i}) \rbrace
+MCR = \frac{1}{n} \sum\limits_{i=1}^{n} \mathbf{1}\lbrace y_{i} \neq \hat{y} (x_{i}) \rbrace
 $$
 
 
@@ -250,8 +260,7 @@ coûteuse en temps. Afin de pallier ce problème, nous avons parallélisé
 la méthode de cross validation. 
 Nous avons donc lancé le (pseudo) leave-one-out cross-validation sur 
 150 observations (50 pour chaque scénario) pour différents seuils de tolérance. 
-**TODO : reference figure 4**
-Figure 4 reporte le taux d’erreur test pour un seuil de tolérance epsilon allant 
+**Figure \@ref(fig:loocv)** reporte le taux d’erreur test pour un seuil de tolérance epsilon allant 
 de $0.05\%$ à $10\%$. On remarque que le seuil de tolérance est croissant à 
 mesure que le seuil de tolérance augmente. 
 Le taux d’erreur tend vers deux tiers à mesure que nous approchons de un. 
@@ -264,9 +273,13 @@ prédictions. Il convient donc de fixer un seuil de tolérance faible mais
 suffisamment élevé également pour éviter de capturer du bruit. 
 Un seuil de tolérance fixé à $2.5\%$ semble raisonnable.
 
-**TODO : insert figure**
-**TODO : check if mathmode is allowed for figure captions**
-Figure 4 : Taux d’erreur test en leave-one-out cross-validation (epsilon allant de 0.05% à 10%)
+```{r loocv, fig.cap="Taux d’erreur test en leave-one-out cross-validation", out.width='70%', fig.align='center'}
+errs1 <- 
+  my.read.table(here("ABC/data/cv4postpr_nval_150_tols_0.005_0.1_50.csv"))
+plot_cv_rej(errs1) + 
+  geom_smooth() +
+  labs(x="Tolerance", y="% Misclassified")
+```
 
 ## Sélection du modèle démographique pour les données réelles {#real-modsel}
 
@@ -276,7 +289,7 @@ cross-validation sur données simulées
 $\alpha = \text{rejetction}$), 
 nous pouvons appliquer le modèle ABC sur nos données réelles. 
 TODO : reference table
-Table 1 fournit, pour chaque population, la probabilité bayésienne a posteriori
+Table \@ref(tab:likeliest) fournit, pour chaque population, la probabilité bayésienne a posteriori
 de chaque scénario démographique et la prédiction du scénario. 
 Nous remarquons que pour quatre populations, le scénario d’expansion est prédit.
 Cela concerne les quatre populations africaines (YRI, ASW, LWK, MKK). Parmi les
@@ -288,28 +301,221 @@ démographique constante dans le temps. Pour certaines populations, le scénario
 démographique prédit est très vraisemblable. C’est le cas par exemple pour les
 Yoruba à Ibadan au Nigéria (YRI) pour lesquels nous estimons le scénario
 d’expansion à $93.3\%$ ou les individus d’ascendance africaine dans le sud-ouest
-des États-Unis (ASW) pour lesquels nous estimons le même scénario à $90.7\%$
+des États-Unis (ASW) pour lesquels nous estimons le même scénario à $90.7\%$.
+Pour d’autres populations, le scénario démographique prédit est plus incertain.
+Par exemple, les portoricains (PUR), les individus d’ascendance mexicaine à 
+Los Angeles (MXL) et les indiens Gujarati à Houston au Texas (GIH) ont une
+probabilité d’avoir une population constante dans le temps à 55% environ et
+d’avoir connu un goulot d’étranglement à 45% environ.
+Nous pouvons donc nous demander si le scénario de prédiction pour ces 
+populations est correct. Si, pour ces populations, le scénario de goulot
+d’étranglement était vrai, alors la théorie de l’origine africaine de l’Homme 
+moderne se confirmerait davantage, avec un scénario d’expansion pour les 
+populations africaines et un scénario de bottleneck pour toutes les autres
+populations.
+
+```{r likeliest}
+likliest <- my.read.table(here("ABC/data/likeliest.csv"))
+likliest %>% 
+  as.data.frame() %>% 
+  dplyr::mutate_if(is.numeric, dplyr::funs(as.character(signif(., 3)))) %>% 
+  knitr::kable(caption="Prédiction du scénario démographique pour chaque population")
+```
+
+Pour vérifier le goodness-of-fit de nos résultats, nous pouvons utiliser l’ACP.
+Figure \@ref(fig:gofacp) fournit les ACP pour les populations YRI et PUR.
+Nous remarquons que pour les Yoruba à Ibadan au Nigéria (YRI), le scénario
+d’expansion est bien prédit. En revanche, pour les portoricains (PUR), nous
+remarquons qu’il est plus difficile de prédire correctement le scénario entre
+population constante et bottleneck (comme nous l’avons souligné précédemment). 
+En effet, l’observation se situe à l’intérieur du cercle pour la population
+constante et du cercle pour le bottleneck.
+
+
+```{r gofacp, fig.cap="ACP des statistiques résumées (populations YRI et PUR)"}
+yri <- ggdraw() + draw_image(readPNG(here("ABC/Figures/yri.png")))
+pur <- ggdraw() + draw_image(readPNG(here("ABC/Figures/pur.png")))
+
+grid.arrange(yri, pur, ncol=2, nrow=1)
+```
 
 # Estimer les paramètres d'un modèle donné
+
+
+Ayant choisi des modèles démographiques maintenant nous nous intéressons à 
+l'estimation des paramètres utilisés précédemment. Ce sont les suivants :
+
+ * $N_e$, la taille efficace avant et après le goulot d’étranglement.
+ * $a$, le facteur de réduction, i.e. $N_e$ divisée par la taille pendant le goulot d’étranglement ($a = N_e / N_{bottleneck}$).
+ * $duration$, la durée du goulot (en années).
+ * $start$, temps depuis le début du goulot (en années).
+
+## Exploration, intuitions
+
+Toute analyse bayésienne repose sur les mêmes principes : la formulation d'un 
+modèle, ajuster le modèle aux données pour finalement améliorer le modèle
+en vérifiant la qualité de l'ajustement et en le comparant à d'autres modèles.
+
+Le Théorème de Bayes permet de calculer le posterior $P(\theta|X)$ en fonction
+de la vraisemblance $P(X |\theta)$, le prior $P(\theta)$ et l'évidence $P(X)$
+fournie par nos données. Ce théorème peut être vu comme une façon de "mettre à
+jour nous croyances" sur la valeur de notre paramètre d'intérêt $\theta$ au fur
+et à mesure que l'on obtient plus d'informations sur le phénomène étudié $P(X)$.
+
+$$
+ P(\theta| X) = \frac{P(X |\theta)P(\theta)}{P(X)}
+$$
+
+En sachant que les paramètres sont tirés indépendamment, 
+à partir du théorème, on fait la substitution de 
+$\theta = (N_e, a, duration, start)$ dans le prior, ce qui nous permet 
+de calculer le posterior:
+
+$$
+ P(\theta| X) = 
+ \frac{P(X |\theta)\prod\limits_{i=1}^{n}\theta_i}{P(X)} =
+ \frac{P(X |\theta)P(N_e)P(a)P(duration)P(start)}{P(X)} 
+$$
+
+
+Les distributions à priori des paramètres de la **figure \@ref(fig:histss)** 
+sont toutes uniformes sauf une, celle
+de $a$, le facteur de réduction. Cela s'explique par l'interprétation de chacun 
+des paramètres dans le contexte de l'inférence démographique. A priori, nous
+ne savons pas quelle aurait pu être la taille efficace ($N_e$) avant un boulot
+d'étranglement. Le même raisonnement s'applique à la durée du goulot 
+($duration$) et le temps depuis le goulot ($start$). Pour cette raison l'hypothèse
+la plus pertinente est celle d'une équiprobabilité entre les valeurs minimum
+et maximum que l'on peut imaginer. Or, quant au facteur de réduction, 
+si un sous-ensemble trop réduit migre ou survie à une catastrophe naturelle 
+($min(N_{bott})\rightarrow max(a)$ grand) la probabilité de survie et puis de reproduction
+devient trop faible. Cela justifie la loi avec une densité plus importante 
+pour faibles valeurs de $a$ que l'on observe.
+
+```{r data.manage, echo=F, include=F, warning=F, message=F, cache=T}
+stat.1000g <- my.read.table(here("ABC/data/stat1000g.csv"))
+loaded <- load(file = here("ABC/simu.expeA.RData"))
+
+sumstats.bott <- subset(sumstats.expeA, subset=models.expeA=="bott")
+params.bott.tb <- tibble(params.bott)
+suppressMessages({
+  .ne.hist <- params.bott.tb %>% ggplot(aes(x=Ne)) + geom_histogram(colour="black", fill="white")
+  .a.hist <- params.bott.tb %>% ggplot(aes(x=a)) + geom_histogram(colour="black", fill="white")
+  .dur.hist <- params.bott.tb %>% ggplot(aes(x=duration)) + geom_histogram(colour="black", fill="white")
+  .star.hist <- params.bott.tb %>% ggplot(aes(x=start)) + geom_histogram(colour="black", fill="white")
+  .param.hists <- grid.arrange(
+    .ne.hist, .a.hist, .dur.hist, .star.hist, 
+    nrow=2, ncol=2#,
+    #top=textGrob("")
+  )
+})
+```
+
+
+```{r histss, out.width='70%', fig.align='center', fig.cap="Distribution empirique des paramètres"}
+plot(.param.hists)
+```
+
+En analysant le comportement des statistiques résumées en fonction de la taille
+efficace, nous constatons que $\theta_{Tajima}$ ($pi$) montre une claire corrélation
+positive. Le $D_{Tajima}$ ainsi que sa variance montrent d'abord une corrélation 
+négative et puis positive dans la région $N_e \leq 1000$. Après les deux statistiques
+semblent atteindre un plateau.
+
+```{r trends, out.width='70%', fig.align='center', fig.cap="Statistiques vs Ne", fig.pos="h"}
+trends <- ggdraw() + draw_image(readPNG(here("ABC/Figures/trends2.png")))
+trends
+```
+
+\newpage
+## Exemple d’inférence
+
+Afin de voir comment la fonction `abc` nous permet d'échantillonner la loi à
+posteriori de nos paramètres ce qui souvent ne peut pas se faire de façon analytique.
+La **figure \@ref(fig:lois)** montre l'échantillonnage du posterior de chacun de 
+nos paramètres d'intérêt pour une observation tirée aléatoirement. 
+La fonction `abc` a été appelée en fixant `tol=0.05` et `method='loclinear'`.
+Nous pouvons constater que le comportement des trois lois est bien différent 
+pour chacun de nos quatre paramètres. 
+
+```{r lois, out.width='95%', fig.align='center', fig.cap="Comparaison des lois pour chaque paramètre", fig.pos="h"}
+lois <- ggdraw() + draw_image(readPNG(here("ABC/Figures/lois2.png")))
+lois
+```
+
+Nous observons que $N_e$ est près d'être un cas idéal d'estimation du posterior. 
+En partant d'une loi uniforme la méthode de rejet nous permet d'arriver à 
+une loi qui s'approche d'une gaussienne qui serait centrée sur la vraie valeur 
+de la taille effective de la population.
+En appliquant la correction par régression linéaire locale, notre estimation
+devient beaucoup plus précise ce qui est mis en évidence par la courbe bleue. 
+
+La qualité des estimations du posterior des autres paramètres est loin d'être
+idéal. Pour `start`, les lois du posterior naïf (rejet) et posterior corrigé (rég. lin.)
+se superposent avec le prior. Quant à `duration`, les posteriors se sont écartés 
+du prior mais on n'a pas une estimation très confiable. Un résultat intéressant 
+est celui du paramètre `a` pour lequel l'estimation n'est pas optimale mais 
+on voit que le prior et posterieur sont contrairement biaisés. Ceci semble contredire
+l'hypothèse que nous avions précédemment émise. Cependant le résultat n'est pas 
+conclusif car l'estimation pourrait encore être améliorée et elle n'a été faite que 
+sur une observation tirée aléatoirement. De plus, les hyperparamètres 
+utilisés ont été choisis arbitrairement et non pas par validation croisée.
+
+
+\newpage
+## Performances
+
+Pour une (ou plusieurs) variable continue, plusieurs métriques existent. L'une 
+des plus fréquentes est la racine de l'erreur quadratique moyenne appelée
+$RMSE$ pour son nom en anglais. Elle est définie comme suit :
+
+$$
+RMSE = \sqrt{ \frac{\sum\limits_{i=1}^{n}(\hat{y}_t - y_{t})^2}{n} }
+$$
+
+Cette métrique est facilement utilisable pour comparer les performances de différents
+modèles. Elle a l'avantage de se trouver dans le même ordre de grandeur que la variable
+d'intérêt. Cependant, la question est : Que faire quand plusieurs paramètres 
+doivent être considérés ? Nous pourrions ne regarder qu'une parmi les quatre 
+valeurs de RMSE. Nous pourrions attribuer des poids à chaque variable
+pour faire une moyenne pondérée. Le choix de poids est crucial car il déterminera
+le classement de méthodes de correction et valeurs de tolérance, et donc tous
+les résultats obtenus.
+
+La pondération peut être justifiée par :
+
+  * Une hypothèse biologique
+  * Un critère numérique pertinent
+
+C'est
+
+```{r rmse, out.width='95%', fig.align='center', fig.cap="rmses", fig.pos="h"}
+lois <- ggdraw() + draw_image(readPNG(here("ABC/Figures/rmses.png")))
+lois
+```
+
+
+## Application aux données réelles
+
+
+
+what
+
+\newpage
 
 # Références et Annexe {-#refs}
 
 <div id="refs"></div>
 
-### something {-#smth} 
+### Repo github {-#smth} 
+
+L'intégralité du code utilisé pour cet analyse est disponible dans le lien
+suivant : [https://github.com/gmagannaDevelop/MetaGenomique/tree/ABC](https://github.com/gmagannaDevelop/MetaGenomique/tree/ABC)
 
 bPeaks 
 
-\newpage
 
-```{r table1}
-#first.reg <- s.param.reg$coefficients
-#colnames(first.reg)[4] <- 'p value'
-#first.reg %>% 
-#  as.data.frame() %>% 
-#  dplyr::mutate_if(is.numeric, funs(as.character(signif(., 3)))) %>% 
-#  knitr::kable(caption="Estimation des coefficients pour prédire `before.ratio`")
-```
+
 
 
 

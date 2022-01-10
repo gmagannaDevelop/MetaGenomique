@@ -138,7 +138,7 @@ plot_abc_distributions <- function(res.abc, params.df, col.name){
     tibble::as_tibble() %>% 
     dplyr::select(Loi = variable, everything()) %>% 
     ggplot2::ggplot(aes(x=value, colour=Loi)) + 
-    geom_density() + labs(title = glue::glue("Lois pour '{col.name}'"), x=col.name)
+    geom_density() + labs(x=col.name)
   .dist.plot
 }
 
